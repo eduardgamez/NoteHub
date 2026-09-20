@@ -6,6 +6,7 @@ import { makeBlock } from '../lib/blockFactory';
 import { BlockCard } from './BlockCard';
 import { CanvasToolbar } from './CanvasToolbar';
 import { InkLayer } from './InkLayer';
+import { buildSpatialIndex, intersects, querySpatialIndex } from '../lib/spatialIndex';
 
 interface Camera { x: number; y: number; zoom: number }
 
@@ -21,6 +22,10 @@ export function CanvasWorkspace() {
   const setTool = useWorkspace((state) => state.setTool);
   const setAiOpen = useWorkspace((state) => state.setAiOpen);
   const removeSelectedBlocks = useWorkspace((state) => state.removeSelectedBlocks);
+  const copySelectedBlocks = useWorkspace((state) => state.copySelectedBlocks);
+  const pasteBlocks = useWorkspace((state) => state.pasteBlocks);
+  const undo = useWorkspace((state) => state.undo);
+  const redo = useWorkspace((state) => state.redo);
   const [camera, setCamera] = useState<Camera>({ x: 10, y: 8, zoom: 0.8 });
   const [viewport, setViewport] = useState({ width: 1200, height: 800 });
   const panRef = useRef<{ x: number; y: number; camera: Camera } | null>(null);
@@ -40,13 +45,18 @@ export function CanvasWorkspace() {
       if ((event.key === 'Delete' || event.key === 'Backspace') && selectedIds.length) removeSelectedBlocks();
       if (event.key.toLowerCase() === 'v') setTool('select');
       if (event.key.toLowerCase() === 'd') setTool('ink');
+      if (event.key.toLowerCase() === 'e') setTool('eraser');
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'c') copySelectedBlocks();
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'v') pasteBlocks();
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); if (event.shiftKey) redo(note.id); else undo(note.id); }
     };
     window.addEventListener('keydown', keydown);
     return () => window.removeEventListener('keydown', keydown);
-  }, [removeSelectedBlocks, selectedIds.length, setTool]);
+  }, [copySelectedBlocks, note.id, pasteBlocks, redo, removeSelectedBlocks, selectedIds.length, setTool, undo]);
 
   const visibleRect = useMemo(() => ({ x: (-camera.x / camera.zoom) - 400, y: (-camera.y / camera.zoom) - 400, width: viewport.width / camera.zoom + 800, height: viewport.height / camera.zoom + 800 }), [camera, viewport]);
-  const visibleBlocks = useMemo(() => note.blocks.filter((block) => block.x < visibleRect.x + visibleRect.width && block.x + block.width > visibleRect.x && block.y < visibleRect.y + visibleRect.height && block.y + block.height > visibleRect.y), [note.blocks, visibleRect]);
+  const blockIndex = useMemo(() => buildSpatialIndex(note.blocks), [note.blocks]);
+  const visibleBlocks = useMemo(() => { const ids = querySpatialIndex(blockIndex, visibleRect); return note.blocks.filter((block) => ids.has(block.id) && intersects(block, visibleRect)); }, [blockIndex, note.blocks, visibleRect]);
 
   const toWorld = useCallback((clientX: number, clientY: number): Point => {
     const rect = surfaceRef.current?.getBoundingClientRect();
@@ -70,7 +80,7 @@ export function CanvasWorkspace() {
   }
 
   function onPointerDown(event: React.PointerEvent) {
-    if (tool === 'ink') return;
+    if (tool === 'ink' || tool === 'eraser') return;
     if (event.button !== 0 && event.button !== 1) return;
     if (event.target === event.currentTarget || (event.target as Element).classList.contains('canvas-grid')) clearSelection();
     panRef.current = { x: event.clientX, y: event.clientY, camera };
@@ -106,7 +116,7 @@ export function CanvasWorkspace() {
     reader.readAsDataURL(file);
   }
 
-  function askAI() { setAiOpen(true); }
+  const askAI = useCallback(() => setAiOpen(true), [setAiOpen]);
 
   return <main className={`canvas-shell tool-${tool}`}>
     <CanvasToolbar addBlock={addBlock} onImage={() => imageRef.current?.click()} onAskAI={askAI} />
@@ -115,7 +125,7 @@ export function CanvasWorkspace() {
       <div className="canvas-grid" style={{ backgroundPosition: `${camera.x}px ${camera.y}px`, backgroundSize: `${24 * camera.zoom}px ${24 * camera.zoom}px` }} />
       <div className="canvas-world" style={{ transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.zoom})` }}>
         {visibleBlocks.map((block) => <BlockCard key={block.id} block={block} zoom={camera.zoom} selected={selectedIds.includes(block.id)} onAskAI={askAI} />)}
-        <InkLayer noteId={note.id} active={tool === 'ink'} toWorld={toWorld} visibleRect={visibleRect} />
+        <InkLayer noteId={note.id} mode={tool} toWorld={toWorld} visibleRect={visibleRect} />
       </div>
       <div className="canvas-meta"><span>{note.emoji}</span><div><strong>{note.title}</strong><small>{visibleBlocks.length} of {note.blocks.length} blocks rendered</small></div></div>
       <div className="zoom-controls"><button onClick={() => zoomAt(camera.zoom - 0.1)}><Minus size={15} /></button><button className="zoom-value" onClick={() => zoomAt(1)}>{Math.round(camera.zoom * 100)}%</button><button onClick={() => zoomAt(camera.zoom + 0.1)}><Plus size={15} /></button><button onClick={() => setCamera({ x: 10, y: 8, zoom: 0.8 })}><LocateFixed size={15} /></button></div>

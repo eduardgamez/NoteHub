@@ -1,5 +1,6 @@
 import { get, set } from 'idb-keyval';
 import type { WorkspaceStateData } from '../types';
+import { cloudSync } from '../sync/cloudSync';
 
 const STORAGE_KEY = 'notehub-workspace-v1';
 
@@ -15,4 +16,5 @@ let saveTimer: number | undefined;
 export function scheduleSave(data: WorkspaceStateData): void {
   window.clearTimeout(saveTimer);
   saveTimer = window.setTimeout(() => void saveWorkspace(data), 350);
+  cloudSync.scheduleSnapshot(data);
 }
