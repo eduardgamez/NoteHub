@@ -1,0 +1,10 @@
+{
+  "name": "NoteHub",
+  "short_name": "NoteHub",
+  "description": "A calm, flexible workspace for notes, code, ink, plans, and AI.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f7f5",
+  "theme_color": "#f7f7f5",
+  "icons": [{ "src": "/notehub-mark.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
