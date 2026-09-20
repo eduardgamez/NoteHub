@@ -57,9 +57,19 @@ try {
   await mobile.goto('http://127.0.0.1:4173', { waitUntil: 'networkidle' });
   await mobile.getByLabel('Toggle sidebar').waitFor();
 
+  const shortDesktop = await context.newPage();
+  await shortDesktop.setViewportSize({ width: 1100, height: 650 });
+  await shortDesktop.goto('http://127.0.0.1:4173', { waitUntil: 'networkidle' });
+  await shortDesktop.getByRole('button', { name: 'Settings', exact: true }).click();
+  const settingsView = shortDesktop.locator('.settings-view');
+  await settingsView.hover();
+  await shortDesktop.mouse.wheel(0, 500);
+  await shortDesktop.waitForTimeout(100);
+  if (await settingsView.evaluate((element) => element.scrollTop) === 0) throw new Error('Settings center panel did not scroll vertically');
+
   await browser.close();
   if (errors.length) throw new Error(`Browser errors:\n${errors.join('\n')}`);
-  console.log('Smoke test passed: themes, encrypted API-key persistence, canvas, modules, offline PWA, and tablet shell.');
+  console.log('Smoke test passed: themes, key persistence, canvas, modules, settings scroll, offline PWA, and tablet shell.');
 } finally {
   server.kill('SIGTERM');
   api.kill('SIGTERM');
