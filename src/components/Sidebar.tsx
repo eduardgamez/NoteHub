@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
-import { CalendarDays, CheckSquare2, ChevronDown, ChevronRight, CircleHelp, Dumbbell, FileText, Folder, Plus, Search, Settings, Sparkles } from 'lucide-react';
+import { CalendarDays, ChevronDown, ChevronRight, CircleHelp, Dumbbell, FileText, Folder, Moon, PanelLeftClose, Plus, Settings, Sun } from 'lucide-react';
 import { useWorkspace } from '../store/useWorkspace';
+import { useTheme } from '../hooks/useTheme';
 
 export function Sidebar() {
   const projects = useWorkspace((state) => state.projects);
@@ -10,12 +11,11 @@ export function Sidebar() {
   const setActiveNote = useWorkspace((state) => state.setActiveNote);
   const activeView = useWorkspace((state) => state.activeView);
   const setActiveView = useWorkspace((state) => state.setActiveView);
-  const setAiOpen = useWorkspace((state) => state.setAiOpen);
   const addProject = useWorkspace((state) => state.addProject);
   const addNote = useWorkspace((state) => state.addNote);
+  const setSidebarOpen = useWorkspace((state) => state.setSidebarOpen);
+  const { theme, followsSystem, toggleTheme, useSystemTheme } = useTheme();
   const [collapsed, setCollapsed] = useState<string[]>([]);
-  const [searching, setSearching] = useState(false);
-
   const [query, setQuery] = useState('');
   const grouped = useMemo(() => projects.map((project) => ({
     project,
@@ -27,16 +27,13 @@ export function Sidebar() {
     <aside className="sidebar">
       <div className="workspace-switcher">
         <div className="brand-mark">N</div>
-        <div className="workspace-name"><strong>Eduard’s space</strong><span>Personal workspace</span></div>
-        <ChevronDown size={15} />
+        <div className="workspace-name"><strong>NoteHub</strong></div>
+        <button className="sidebar-close" onClick={() => setSidebarOpen(false)} aria-label="Close sidebar"><PanelLeftClose size={17} /></button>
       </div>
 
       <nav className="sidebar-nav" aria-label="Workspace">
-        <button onClick={() => setSearching(!searching)}><Search size={16} /><span>Search</span><kbd>⌘K</kbd></button>
-        {searching && <input autoFocus className="sidebar-search" placeholder="Search notes…" value={query} onChange={(event) => setQuery(event.target.value)} />}
-        <button className={activeView === 'inbox' ? 'active' : ''} onClick={() => { setActiveView('inbox'); setAiOpen(false); }}><Sparkles size={16} /><span>AI inbox</span><span className="nav-badge">3</span></button>
+        <input className="sidebar-search" type="search" aria-label="Search notes" placeholder="Search notes…" value={query} onChange={(event) => setQuery(event.target.value)} />
         <button className={activeView === 'calendar' ? 'active' : ''} onClick={() => setActiveView('calendar')}><CalendarDays size={16} /><span>Calendar</span></button>
-        <button className={activeView === 'tasks' ? 'active' : ''} onClick={() => setActiveView('tasks')}><CheckSquare2 size={16} /><span>Tasks & reminders</span></button>
         <button className={activeView === 'gym' ? 'active' : ''} onClick={() => setActiveView('gym')}><Dumbbell size={16} /><span>Gym</span></button>
       </nav>
 
@@ -61,6 +58,7 @@ export function Sidebar() {
       </div>
 
       <div className="sidebar-bottom">
+        <button className="theme-toggle" onClick={toggleTheme} onDoubleClick={useSystemTheme} aria-label={theme === 'dark' ? 'Use light theme' : 'Use dark theme'} title={`${theme === 'dark' ? 'Use light theme' : 'Use dark theme'}${followsSystem ? ' · Following system' : ' · Double-click to follow system'}`}>{theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}<span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span></button>
         <button className={activeView === 'settings' ? 'active' : ''} onClick={() => setActiveView('settings')}><Settings size={16} /><span>Settings</span></button>
         <button><CircleHelp size={16} /><span>Help & shortcuts</span></button>
         <div className="storage-meter"><div><span>Local workspace</span><span>12 MB</span></div><div className="meter"><span /></div></div>

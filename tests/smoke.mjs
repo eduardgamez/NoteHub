@@ -15,7 +15,12 @@ try {
   page.on('console', (message) => { if (message.type() === 'error' && !message.text().includes('ERR_INTERNET_DISCONNECTED')) errors.push(`${message.text()} at ${message.location().url}`); });
 
   await page.goto('http://127.0.0.1:4173', { waitUntil: 'networkidle' });
+  await page.locator('.week-calendar').waitFor();
+  if (await page.locator('.ai-panel').count()) throw new Error('AI panel opened on the home view');
   await page.getByText('Sensitivity analysis', { exact: true }).first().waitFor();
+  await page.locator('.folder-notes .note-row', { hasText: 'Sensitivity analysis' }).click();
+  await page.locator('.document-title h1', { hasText: 'Sensitivity analysis' }).waitFor();
+  await page.getByRole('button', { name: 'Calendar', exact: true }).click();
   if (await page.locator('html').getAttribute('data-theme') !== 'dark') throw new Error('System dark theme was not applied');
 
   await page.getByLabel('Use light theme').click();
@@ -38,12 +43,49 @@ try {
 
   await page.getByRole('button', { name: 'Calendar' }).click();
   await page.locator('.week-calendar').waitFor();
-  await page.getByRole('button', { name: 'Tasks & reminders' }).click();
-  await page.getByText('Leaving for university', { exact: true }).first().waitFor();
+  await page.getByRole('heading', { name: 'Calendar', exact: true }).waitFor();
+  const reminderDate = new Date(); reminderDate.setHours(12, 0, 0, 0);
+  const reminderLocal = `${reminderDate.getFullYear()}-${String(reminderDate.getMonth() + 1).padStart(2, '0')}-${String(reminderDate.getDate()).padStart(2, '0')}T12:00`;
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.getByRole('button', { name: 'Reminder', exact: true }).click();
+  await page.getByRole('dialog').getByLabel('Title').fill('Calendar reminder check');
+  await page.getByRole('dialog').getByLabel('When').fill(reminderLocal);
+  await page.getByRole('button', { name: 'Create reminder' }).click();
+  await page.locator('.calendar-reminder', { hasText: 'Calendar reminder check' }).click();
+  await page.getByLabel('New checklist item').fill('Bring keys');
+  await page.getByRole('button', { name: 'Add checklist item' }).click();
+  await page.getByRole('dialog', { name: 'Manage reminder' }).getByText('Bring keys').waitFor();
+  await page.getByRole('dialog', { name: 'Manage reminder' }).getByLabel('Title').fill('Edited reminder');
+  await page.getByRole('dialog', { name: 'Manage reminder' }).getByRole('button', { name: 'Save' }).click();
+  await page.locator('.calendar-reminder', { hasText: 'Edited reminder' }).waitFor();
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.getByRole('button', { name: 'Event', exact: true }).click();
+  await page.getByRole('dialog').getByLabel('Title').fill('Calendar event check');
+  await page.getByRole('dialog').getByLabel('Starts').fill(reminderLocal);
+  const eventEnd = `${reminderLocal.slice(0, 11)}13:00`;
+  await page.getByRole('dialog').getByLabel('Ends').fill(eventEnd);
+  await page.getByRole('button', { name: 'Create event' }).click();
+  await page.locator('.calendar-event', { hasText: 'Calendar event check' }).waitFor();
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await page.getByRole('button', { name: 'Reminder', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Create calendar item' }).getByLabel('Checklist template').selectOption('template-university');
+  await page.getByRole('dialog', { name: 'Create calendar item' }).getByLabel('Title').fill('Template reminder check');
+  await page.getByRole('dialog', { name: 'Create calendar item' }).getByLabel('When').fill(reminderLocal);
+  await page.getByRole('button', { name: 'Create reminder' }).click();
+  await page.locator('.calendar-reminder', { hasText: 'Template reminder check' }).click();
+  await page.getByRole('dialog', { name: 'Manage reminder' }).getByText('Keys', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Delete reminder' }).click();
+  await page.getByRole('button', { name: 'month', exact: true }).click();
+  await page.locator('.month-reminder', { hasText: 'Edited reminder' }).click();
+  await page.getByRole('dialog', { name: 'Manage reminder' }).getByRole('button', { name: 'Mark done' }).click();
+  await page.locator('.month-reminder.done', { hasText: 'Edited reminder' }).waitFor();
+  await page.locator('.folder-notes .note-row', { hasText: 'Sensitivity analysis' }).click();
+  await page.locator('.document-title h1', { hasText: 'Sensitivity analysis' }).waitFor();
   await page.getByRole('button', { name: 'Gym', exact: true }).click();
   await page.getByText('Incline dumbbell press', { exact: true }).first().waitFor();
-  await page.getByRole('button', { name: /AI inbox/ }).click();
-  await page.getByText('Your workspace inbox', { exact: true }).waitFor();
+  await page.getByLabel('Open AI panel').click();
+  await page.locator('.ai-panel').waitFor();
+  await page.getByLabel('Close AI panel').click();
 
   await page.evaluate(() => navigator.serviceWorker.ready);
   await page.reload({ waitUntil: 'networkidle' });

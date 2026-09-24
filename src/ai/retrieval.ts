@@ -1,6 +1,7 @@
 import type { AIContextItem } from './provider';
 import type { Note, WorkspaceStateData } from '../types';
 import type { AIPermissions } from './permissions';
+import { projectStroke, type DocumentLayout } from '../lib/documentInk';
 
 const clean = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 const terms = (query: string) => query.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((term) => term.length > 2);
@@ -38,12 +39,18 @@ export function retrieveWorkspaceContext(query: string, data: WorkspaceStateData
   return context.sort((a, b) => (b._score ?? 1) - (a._score ?? 1)).slice(0, 20).map(({ id, type, content }) => ({ id, type, content }));
 }
 
-export function renderSelectedInk(note: Note, selectedBlockIds: string[]): AIContextItem | null {
+export function renderSelectedInk(note: Note, selectedBlockIds: string[], layout?: DocumentLayout): AIContextItem | null {
   if (!note.strokes.length || !selectedBlockIds.length) return null;
   const blocks = note.blocks.filter((block) => selectedBlockIds.includes(block.id));
   if (!blocks.length) return null;
-  const bounds = blocks.reduce((box, block) => ({ x: Math.min(box.x, block.x), y: Math.min(box.y, block.y), right: Math.max(box.right, block.x + block.width), bottom: Math.max(box.bottom, block.y + block.height) }), { x: Infinity, y: Infinity, right: -Infinity, bottom: -Infinity });
-  const strokes = note.strokes.filter((stroke) => stroke.bounds.x < bounds.right && stroke.bounds.x + stroke.bounds.width > bounds.x && stroke.bounds.y < bounds.bottom && stroke.bounds.y + stroke.bounds.height > bounds.y);
+  const bounds = blocks.reduce((box, block) => {
+    const rect = layout?.[block.id] ?? block;
+    return { x: Math.min(box.x, rect.x), y: Math.min(box.y, rect.y), right: Math.max(box.right, rect.x + rect.width), bottom: Math.max(box.bottom, rect.y + rect.height) };
+  }, { x: Infinity, y: Infinity, right: -Infinity, bottom: -Infinity });
+  const strokes = note.strokes.map((stroke) => layout ? projectStroke(stroke, note.blocks, layout) : stroke).filter((stroke) => {
+    if (!stroke) return false;
+    return stroke.bounds.x < bounds.right && stroke.bounds.x + stroke.bounds.width > bounds.x && stroke.bounds.y < bounds.bottom && stroke.bounds.y + stroke.bounds.height > bounds.y;
+  }).filter((stroke): stroke is NonNullable<typeof stroke> => stroke !== null);
   if (!strokes.length) return null;
   const width = Math.min(1024, Math.max(1, bounds.right - bounds.x));
   const height = Math.min(1024, Math.max(1, bounds.bottom - bounds.y));

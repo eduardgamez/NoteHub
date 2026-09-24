@@ -8,6 +8,9 @@ export interface InkStroke {
   width: number;
   points: Point[];
   bounds: { x: number; y: number; width: number; height: number };
+  anchorBlockId?: string;
+  anchorOrigin?: Point;
+  space?: 'block' | 'document';
 }
 
 export interface CanvasBlock {
@@ -131,7 +134,7 @@ export interface PendingProposal {
   createdAt: number;
 }
 
-export type AppView = 'note' | 'calendar' | 'tasks' | 'gym' | 'inbox' | 'settings' | 'context';
+export type AppView = 'note' | 'calendar' | 'gym' | 'settings' | 'context';
 
 export interface WorkspaceStateData {
   version: number;

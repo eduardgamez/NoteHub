@@ -16,6 +16,7 @@ export type SyncPayload =
   | { kind: 'event.upsert'; event: CalendarEvent }
   | { kind: 'event.remove'; eventId: string }
   | { kind: 'task.upsert'; task: Task }
+  | { kind: 'task.remove'; taskId: string }
   | { kind: 'workout.upsert'; workout: Workout }
   | { kind: 'exercise.upsert'; exercise: Exercise }
   | { kind: 'chat.message'; threadId: string; message: ChatMessageRecord }

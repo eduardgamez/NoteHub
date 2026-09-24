@@ -46,6 +46,8 @@ interface WorkspaceStore extends WorkspaceStateData {
   updateEvent: (event: CalendarEvent) => void;
   removeEvent: (id: string) => void;
   addTask: (task: Task) => void;
+  updateTask: (task: Task) => void;
+  removeTask: (id: string) => void;
   toggleTask: (id: string) => void;
   toggleTaskItem: (taskId: string, itemId: string) => void;
   addWorkout: (workout: Workout) => void;
@@ -108,11 +110,11 @@ function withCheckpoint(state: WorkspaceStore, noteId: string) {
 export const useWorkspace = create<WorkspaceStore>((set, get) => ({
   ...seedWorkspace,
   hydrated: false,
-  activeView: 'note',
+  activeView: 'calendar',
   selectedIds: [],
   tool: 'select',
   inkWidth: 2.5,
-  aiOpen: true,
+  aiOpen: false,
   sidebarOpen: true,
   history: {},
   future: {},
@@ -243,6 +245,8 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
   updateEvent(event) { set((state) => ({ calendarEvents: state.calendarEvents.map((item) => item.id === event.id ? event : item) })); persist(get()); syncEngine.publish({ kind: 'event.upsert', event }); },
   removeEvent(id) { set((state) => ({ calendarEvents: state.calendarEvents.filter((event) => event.id !== id) })); persist(get()); syncEngine.publish({ kind: 'event.remove', eventId: id }); },
   addTask(task) { set((state) => ({ tasks: [...state.tasks, task] })); persist(get()); syncEngine.publish({ kind: 'task.upsert', task }); },
+  updateTask(task) { set((state) => ({ tasks: state.tasks.map((item) => item.id === task.id ? task : item) })); persist(get()); syncEngine.publish({ kind: 'task.upsert', task }); },
+  removeTask(id) { set((state) => ({ tasks: state.tasks.filter((item) => item.id !== id) })); persist(get()); syncEngine.publish({ kind: 'task.remove', taskId: id }); },
   toggleTask(id) { set((state) => ({ tasks: state.tasks.map((task) => task.id === id ? { ...task, done: !task.done } : task) })); persist(get()); const task = get().tasks.find((item) => item.id === id); if (task) syncEngine.publish({ kind: 'task.upsert', task }); },
   toggleTaskItem(taskId, itemId) { set((state) => ({ tasks: state.tasks.map((task) => task.id === taskId ? { ...task, checklist: task.checklist.map((item) => item.id === itemId ? { ...item, done: !item.done } : item) } : task) })); persist(get()); const task = get().tasks.find((item) => item.id === taskId); if (task) syncEngine.publish({ kind: 'task.upsert', task }); },
   addWorkout(workout) { set((state) => ({ workouts: [...state.workouts, workout] })); persist(get()); syncEngine.publish({ kind: 'workout.upsert', workout }); },
@@ -303,6 +307,7 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
     if (operation.kind === 'event.upsert') set((state) => ({ calendarEvents: state.calendarEvents.some((item) => item.id === operation.event.id) ? state.calendarEvents.map((item) => item.id === operation.event.id ? operation.event : item) : [...state.calendarEvents, operation.event] }));
     if (operation.kind === 'event.remove') set((state) => ({ calendarEvents: state.calendarEvents.filter((event) => event.id !== operation.eventId) }));
     if (operation.kind === 'task.upsert') set((state) => ({ tasks: state.tasks.some((item) => item.id === operation.task.id) ? state.tasks.map((item) => item.id === operation.task.id ? operation.task : item) : [...state.tasks, operation.task] }));
+    if (operation.kind === 'task.remove') set((state) => ({ tasks: state.tasks.filter((item) => item.id !== operation.taskId) }));
     if (operation.kind === 'workout.upsert') set((state) => ({ workouts: state.workouts.some((item) => item.id === operation.workout.id) ? state.workouts.map((item) => item.id === operation.workout.id ? operation.workout : item) : [...state.workouts, operation.workout] }));
     if (operation.kind === 'exercise.upsert') set((state) => ({ exercises: state.exercises.some((item) => item.id === operation.exercise.id) ? state.exercises.map((item) => item.id === operation.exercise.id ? operation.exercise : item) : [...state.exercises, operation.exercise] }));
     if (operation.kind === 'chat.message') set((state) => ({ chatThreads: { ...state.chatThreads, [operation.threadId]: (state.chatThreads[operation.threadId] ?? []).some((message) => message.id === operation.message.id) ? state.chatThreads[operation.threadId] : [...(state.chatThreads[operation.threadId] ?? []), operation.message] } }));
