@@ -134,7 +134,7 @@ export interface PendingProposal {
   createdAt: number;
 }
 
-export type AppView = 'note' | 'calendar' | 'gym' | 'settings' | 'context';
+export type AppView = 'note' | 'project' | 'calendar' | 'gym' | 'settings' | 'context';
 
 export interface WorkspaceStateData {
   version: number;

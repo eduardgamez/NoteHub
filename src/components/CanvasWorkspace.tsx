@@ -80,7 +80,7 @@ export function CanvasWorkspace() {
     <input ref={imageRef} hidden type="file" accept="image/*" capture="environment" onChange={(event) => addImage(event.target.files?.[0])} />
     <div className="document-viewport" onPointerDown={(event) => { if (event.target === event.currentTarget) clearSelection(); }}>
       <article ref={pageRef} className="document-page">
-        <header className="document-title"><span>{note.emoji}</span><h1>{note.title}</h1></header>
+        <header className="document-title"><h1>{note.title}</h1></header>
         <div className="document-blocks">
           {note.blocks.map((block) => <BlockCard key={block.id} block={block} zoom={1} selected={selectedIds.includes(block.id)} onAskAI={askAI} />)}
         </div>

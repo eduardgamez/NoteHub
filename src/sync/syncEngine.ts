@@ -1,8 +1,10 @@
-import type { CalendarEvent, CanvasBlock, ChatMessageRecord, Exercise, FolderContext, InkStroke, Note, PendingProposal, Project, Task, Workout, WorkspaceStateData } from '../types';
+import type { CalendarEvent, CanvasBlock, ChatMessageRecord, Exercise, Folder, FolderContext, InkStroke, Note, PendingProposal, Project, Task, Workout, WorkspaceStateData } from '../types';
 import { cloudSync } from './cloudSync';
 
 export type SyncPayload =
   | { kind: 'project.upsert'; project: Project }
+  | { kind: 'project.remove'; projectId: string }
+  | { kind: 'folder.upsert'; folder: Folder }
   | { kind: 'note.upsert'; note: Note }
   | { kind: 'block.upsert'; noteId: string; block: CanvasBlock }
   | { kind: 'block.remove'; noteId: string; blockId: string }

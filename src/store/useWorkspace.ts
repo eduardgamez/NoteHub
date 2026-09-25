@@ -4,13 +4,14 @@ import { loadWorkspace, scheduleSave } from '../lib/storage';
 import { syncEngine, type SyncOperation } from '../sync/syncEngine';
 import { cloudSync } from '../sync/cloudSync';
 import type {
-  AppView, CalendarEvent, CanvasBlock, ChatMessageRecord, Exercise, FolderContext, InkStroke,
+  AppView, CalendarEvent, CanvasBlock, ChatMessageRecord, Exercise, Folder, FolderContext, InkStroke,
   Note, PendingProposal, Project, Task, ToolMode, Workout, WorkspaceStateData,
 } from '../types';
 
 interface WorkspaceStore extends WorkspaceStateData {
   hydrated: boolean;
   activeView: AppView;
+  activeProjectId: string;
   selectedIds: string[];
   tool: ToolMode;
   inkWidth: number;
@@ -19,7 +20,11 @@ interface WorkspaceStore extends WorkspaceStateData {
   history: Record<string, Note[]>;
   future: Record<string, Note[]>;
   setActiveNote: (id: string) => void;
+  openProject: (id: string) => void;
   addProject: (project: Project) => void;
+  updateProject: (project: Project) => void;
+  removeProject: (id: string) => void;
+  addFolder: (folder: Folder) => void;
   addNote: (note: Note) => void;
   setActiveView: (view: AppView) => void;
   setTool: (tool: ToolMode) => void;
@@ -111,6 +116,7 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
   ...seedWorkspace,
   hydrated: false,
   activeView: 'calendar',
+  activeProjectId: seedWorkspace.notes[seedWorkspace.activeNoteId].projectId,
   selectedIds: [],
   tool: 'select',
   inkWidth: 2.5,
@@ -120,11 +126,28 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
   future: {},
 
   setActiveNote(id) {
-    set({ activeNoteId: id, activeView: 'note', selectedIds: [] });
+    const note = get().notes[id];
+    if (!note) return;
+    set({ activeNoteId: id, activeProjectId: note.projectId, activeView: 'note', sidebarOpen: window.innerWidth > 820, selectedIds: [] });
     persist(get());
   },
+  openProject(id) {
+    if (id === 'gym') { set({ activeProjectId: id, activeView: 'gym', selectedIds: [] }); return; }
+    const first = Object.values(get().notes).find((note) => note.projectId === id);
+    set({ activeProjectId: id, activeNoteId: first?.id ?? get().activeNoteId, activeView: first ? 'note' : 'project', aiOpen: window.innerWidth > 820, sidebarOpen: window.innerWidth > 820, selectedIds: [] });
+  },
   addProject(project) { set((state) => ({ projects: [...state.projects, project] })); persist(get()); syncEngine.publish({ kind: 'project.upsert', project }); },
-  addNote(note) { set((state) => ({ notes: { ...state.notes, [note.id]: note }, activeNoteId: note.id, activeView: 'note' })); persist(get()); syncEngine.publish({ kind: 'note.upsert', note }); },
+  updateProject(project) { set((state) => ({ projects: state.projects.map((item) => item.id === project.id ? project : item) })); persist(get()); syncEngine.publish({ kind: 'project.upsert', project }); },
+  removeProject(id) {
+    if (id === 'gym') return;
+    set((state) => {
+      const notes = Object.fromEntries(Object.entries(state.notes).filter(([, note]) => note.projectId !== id));
+      return { projects: state.projects.filter((project) => project.id !== id), folders: state.folders.filter((folder) => folder.projectId !== id), notes, activeNoteId: notes[state.activeNoteId] ? state.activeNoteId : Object.keys(notes)[0] ?? '', activeView: state.activeProjectId === id ? 'calendar' : state.activeView, activeProjectId: state.activeProjectId === id ? '' : state.activeProjectId };
+    });
+    persist(get()); syncEngine.publish({ kind: 'project.remove', projectId: id });
+  },
+  addFolder(folder) { set((state) => ({ folders: [...state.folders, folder] })); persist(get()); syncEngine.publish({ kind: 'folder.upsert', folder }); },
+  addNote(note) { set((state) => ({ notes: { ...state.notes, [note.id]: note }, activeNoteId: note.id, activeProjectId: note.projectId, activeView: 'note', sidebarOpen: window.innerWidth > 820 })); persist(get()); syncEngine.publish({ kind: 'note.upsert', note }); },
   setActiveView(activeView) { set({ activeView, selectedIds: [] }); },
   setTool(tool) { set({ tool }); },
   setInkWidth(inkWidth) { set({ inkWidth }); },
@@ -288,12 +311,17 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
       const stored = await loadWorkspace();
       const remote = await cloudSync.loadSnapshot();
       const data = stored ? migrate(stored) : remote ? migrate(remote) : seedWorkspace;
-      set({ ...data, hydrated: true });
+      set({ ...data, activeProjectId: data.notes[data.activeNoteId]?.projectId ?? data.projects[0]?.id ?? '', hydrated: true });
       if (!remote) persist(get());
     } catch { set({ hydrated: true }); }
   },
   applyRemote(operation) {
     if (operation.kind === 'project.upsert') set((state) => ({ projects: state.projects.some((item) => item.id === operation.project.id) ? state.projects.map((item) => item.id === operation.project.id ? operation.project : item) : [...state.projects, operation.project] }));
+    if (operation.kind === 'project.remove') set((state) => {
+      const notes = Object.fromEntries(Object.entries(state.notes).filter(([, note]) => note.projectId !== operation.projectId));
+      return { projects: state.projects.filter((project) => project.id !== operation.projectId), folders: state.folders.filter((folder) => folder.projectId !== operation.projectId), notes, activeNoteId: notes[state.activeNoteId] ? state.activeNoteId : Object.keys(notes)[0] ?? '', activeView: state.activeProjectId === operation.projectId ? 'calendar' : state.activeView, activeProjectId: state.activeProjectId === operation.projectId ? '' : state.activeProjectId };
+    });
+    if (operation.kind === 'folder.upsert') set((state) => ({ folders: state.folders.some((folder) => folder.id === operation.folder.id) ? state.folders.map((folder) => folder.id === operation.folder.id ? operation.folder : folder) : [...state.folders, operation.folder] }));
     if (operation.kind === 'note.upsert') set((state) => ({ notes: { ...state.notes, [operation.note.id]: operation.note } }));
     if (operation.kind === 'block.upsert') get().upsertBlock(operation.noteId, operation.block, false, false);
     if (operation.kind === 'stroke.add') get().addStroke(operation.noteId, operation.stroke, false, false);

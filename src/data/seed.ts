@@ -28,7 +28,7 @@ export const seedWorkspace: WorkspaceStateData = {
         { id: 'focus', label: 'Current focus', value: 'Sensitivity analysis · Chapter 4' },
       ],
     },
-    { id: 'gym', title: 'Gym', emoji: '◒', context: [{ id: 'split', label: 'Current split', value: 'Upper / Lower · 4 days' }] },
+    { id: 'gym', title: 'Gym', emoji: '🏋️', context: [{ id: 'split', label: 'Current split', value: 'Upper / Lower · 4 days' }] },
     { id: 'personal', title: 'Personal', emoji: '⌂', context: [] },
   ],
   folders: [

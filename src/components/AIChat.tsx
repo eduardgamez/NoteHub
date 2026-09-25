@@ -16,9 +16,10 @@ export function AIChat({ global = false, compact = false }: AIChatProps) {
   const [thinking, setThinking] = useState(false);
   const [error, setError] = useState('');
   const [providerConnected, setProviderConnected] = useState<boolean | null>(null);
+  const [modelName, setModelName] = useState('');
   const state = useWorkspace();
-  const note = state.notes[state.activeNoteId];
-  const project = state.projects.find((item) => item.id === note.projectId);
+  const note = state.notes[state.activeNoteId] ?? Object.values(state.notes)[0];
+  const project = state.projects.find((item) => item.id === state.activeProjectId) ?? state.projects.find((item) => item.id === note?.projectId);
   const threadId = global ? 'global' : `project:${project?.id ?? 'unknown'}`;
   const messages = state.chatThreads[threadId] ?? [];
   const pending = state.pendingProposals.filter((proposal) => proposal.threadId === threadId && proposal.status === 'pending');
@@ -30,7 +31,7 @@ export function AIChat({ global = false, compact = false }: AIChatProps) {
 
   useEffect(() => {
     let current = true;
-    void Promise.all([hasProviderKey(providerId), getProviderStatus()]).then(([local, server]) => { if (current) setProviderConnected(local || Boolean(server?.[providerId])); });
+    void Promise.all([hasProviderKey(providerId), getProviderStatus()]).then(([local, server]) => { if (current) { setProviderConnected(local || Boolean(server?.[providerId])); setModelName(server?.models?.[providerId] ?? { openai: 'gpt-5-mini', anthropic: 'Claude Sonnet', gemini: 'Gemini Flash' }[providerId]); } });
     return () => { current = false; };
   }, [providerId]);
 
@@ -50,9 +51,9 @@ export function AIChat({ global = false, compact = false }: AIChatProps) {
     setThinking(true);
     try {
       const permissions = getAIPermissions();
-      const context = retrieveWorkspaceContext(content, data, { ...(global ? {} : { projectId: project?.id }), currentNoteId: note.id, selectedBlockIds: state.selectedIds, permissions });
+      const context = retrieveWorkspaceContext(content, data, { ...(global ? {} : { projectId: project?.id }), currentNoteId: note?.id, selectedBlockIds: state.selectedIds, permissions });
       const page = document.querySelector<HTMLElement>('.document-page');
-      const inkImage = renderSelectedInk(note, state.selectedIds, page ? readDocumentLayout(page) : undefined); if (inkImage) context.push(inkImage);
+      const inkImage = note ? renderSelectedInk(note, state.selectedIds, page ? readDocumentLayout(page) : undefined) : null; if (inkImage) context.push(inkImage);
       const history: AIMessage[] = [...messages, userMessage].slice(-20).map(({ role, content: messageContent }) => ({ role, content: messageContent }));
       const response = await aiProvider.complete(history, context, { global, web: true });
       state.appendChatMessage(threadId, { id: crypto.randomUUID(), role: 'assistant', content: response.text, createdAt: Date.now() });
@@ -76,7 +77,7 @@ export function AIChat({ global = false, compact = false }: AIChatProps) {
   return <div className={`ai-chat ${compact ? 'compact' : ''} ${global && !compact ? 'global-chat' : ''}`}>
     {global && !compact && <div className="global-ai-intro"><div className="global-ai-mark"><Sparkles size={22} /></div><div><p className="eyebrow">NOTEHUB AI</p><h1>Your workspace inbox</h1><p>Ask a question or turn a thought into reviewed, structured actions.</p></div><span className="provider-pill">{getActiveProvider()}</span></div>}
     <div className="ai-thread">
-      {compact && messages.length === 0 && providerConnected !== null && <div className="provider-empty">{providerConnected ? `API from ${providerName}` : 'No API connected'}</div>}
+      {compact && messages.length === 0 && providerConnected !== null && <div className="provider-empty">{providerConnected ? `Using ${providerName} ${modelName}` : 'No API connected'}</div>}
       {messages.length === 0 && !compact && <div className="message assistant"><div className="ai-avatar"><Sparkles size={13} /></div><div>{greeting}</div></div>}
       {messages.map((message) => <div key={message.id} className={`message ${message.role}`}>{message.role === 'assistant' && !compact && <div className="ai-avatar"><Sparkles size={13} /></div>}<div>{message.content}</div></div>)}
       {thinking && <div className="message assistant">{!compact && <div className="ai-avatar"><Sparkles size={13} /></div>}<div className="typing"><i /><i /><i /></div></div>}

@@ -14,7 +14,7 @@ export interface ProviderProposal {
   payload: Record<string, unknown>;
 }
 export interface AIResponse { text: string; proposals?: ProviderProposal[] }
-export interface ProviderStatus { openai: boolean; anthropic: boolean; gemini: boolean }
+export interface ProviderStatus { openai: boolean; anthropic: boolean; gemini: boolean; models?: Record<ProviderId, string> }
 
 export interface AIProvider {
   id: string;
@@ -51,7 +51,7 @@ export async function getProviderStatus(): Promise<ProviderStatus | null> {
     const response = await fetch('/api/ai/status');
     if (!response.ok) return null;
     const result = await response.json();
-    return result.providers as ProviderStatus;
+    return { ...result.providers, models: result.models } as ProviderStatus;
   } catch { return null; }
 }
 

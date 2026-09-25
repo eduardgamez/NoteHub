@@ -1,68 +1,49 @@
-import { useMemo, useState } from 'react';
-import { CalendarDays, ChevronDown, ChevronRight, CircleHelp, Dumbbell, FileText, Folder, Moon, PanelLeftClose, Plus, Settings, Sun } from 'lucide-react';
+import { useState } from 'react';
+import { ArrowLeft, Brain, ChevronDown, ChevronRight, FileText, Folder, Plus, X } from 'lucide-react';
 import { useWorkspace } from '../store/useWorkspace';
-import { useTheme } from '../hooks/useTheme';
 
 export function Sidebar() {
+  const projectId = useWorkspace((state) => state.activeProjectId);
   const projects = useWorkspace((state) => state.projects);
-  const notes = useWorkspace((state) => state.notes);
-  const folders = useWorkspace((state) => state.folders);
+  const allFolders = useWorkspace((state) => state.folders);
+  const allNotes = useWorkspace((state) => state.notes);
+  const project = projects.find((item) => item.id === projectId);
+  const folders = allFolders.filter((item) => item.projectId === projectId);
+  const notes = Object.values(allNotes).filter((item) => item.projectId === projectId);
   const activeNoteId = useWorkspace((state) => state.activeNoteId);
-  const setActiveNote = useWorkspace((state) => state.setActiveNote);
   const activeView = useWorkspace((state) => state.activeView);
+  const setActiveNote = useWorkspace((state) => state.setActiveNote);
   const setActiveView = useWorkspace((state) => state.setActiveView);
-  const addProject = useWorkspace((state) => state.addProject);
+  const setAiOpen = useWorkspace((state) => state.setAiOpen);
+  const addFolder = useWorkspace((state) => state.addFolder);
   const addNote = useWorkspace((state) => state.addNote);
-  const setSidebarOpen = useWorkspace((state) => state.setSidebarOpen);
-  const { theme, followsSystem, toggleTheme, useSystemTheme } = useTheme();
-  const [collapsed, setCollapsed] = useState<string[]>([]);
-  const [query, setQuery] = useState('');
-  const grouped = useMemo(() => projects.map((project) => ({
-    project,
-    notes: Object.values(notes).filter((note) => note.projectId === project.id && note.title.toLowerCase().includes(query.toLowerCase())),
-    folders: folders.filter((folder) => folder.projectId === project.id && (folder.title.toLowerCase().includes(query.toLowerCase()) || Object.values(notes).some((note) => note.folderId === folder.id && note.title.toLowerCase().includes(query.toLowerCase())))),
-  })), [projects, notes, folders, query]);
+  const [expanded, setExpanded] = useState<string[]>([]);
+  const [selectedFolderId, setSelectedFolderId] = useState<string | undefined>();
+  const [addOpen, setAddOpen] = useState(false);
 
-  return (
-    <aside className="sidebar">
-      <div className="workspace-switcher">
-        <div className="brand-mark">N</div>
-        <div className="workspace-name"><strong>NoteHub</strong></div>
-        <button className="sidebar-close" onClick={() => setSidebarOpen(false)} aria-label="Close sidebar"><PanelLeftClose size={17} /></button>
+  function createNote() {
+    const title = window.prompt('Document name');
+    if (title?.trim()) {
+      if (selectedFolderId) setExpanded((current) => current.filter((id) => id !== selectedFolderId));
+      addNote({ id: crypto.randomUUID(), title: title.trim(), emoji: '◇', projectId, folderId: selectedFolderId, updatedAt: Date.now(), blocks: [], strokes: [] });
+    }
+    setAddOpen(false);
+  }
+
+  function createFolder() {
+    const title = window.prompt('Folder name');
+    if (title?.trim()) addFolder({ id: crypto.randomUUID(), projectId, title: title.trim(), emoji: '▧', context: [] });
+    setAddOpen(false);
+  }
+
+  return <aside className="project-sidebar">
+    <div className="project-sidebar-heading"><button aria-label="Back to home" onClick={() => { setActiveView('calendar'); setAiOpen(false); }}><ArrowLeft size={19} /></button><strong>PROJECTS</strong><button aria-label="Add folder or document" onClick={() => setAddOpen(!addOpen)}><Plus size={20} /></button></div>
+    {addOpen && <div className="project-add-menu"><div><span>Add to {selectedFolderId ? folders.find((folder) => folder.id === selectedFolderId)?.title : project?.title}</span><button aria-label="Close add menu" onClick={() => setAddOpen(false)}><X size={13} /></button></div><button onClick={createFolder}><Folder size={15} /> New folder</button><button onClick={createNote}><FileText size={15} /> New document</button></div>}
+    {project ? <div className="project-tree"><div className="project-tree-root"><span>{project.emoji}</span><strong>{project.title}</strong><button title="Project memory" aria-label="Project memory" onClick={() => setActiveView('context')}><Brain size={15} /></button></div>
+      <div className="project-tree-children">
+        {folders.map((folder) => { const isOpen = !expanded.includes(folder.id); return <div className="tree-folder" key={folder.id}><button className={`tree-folder-row ${selectedFolderId === folder.id ? 'selected' : ''}`} onClick={() => { setSelectedFolderId(folder.id); setExpanded(isOpen ? [...expanded, folder.id] : expanded.filter((id) => id !== folder.id)); }}><span>{isOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}</span><Folder size={15} /><strong>{folder.title}</strong></button>{isOpen && <div className="tree-documents">{notes.filter((note) => note.folderId === folder.id).map((note) => <button className={`tree-document ${activeNoteId === note.id && activeView === 'note' ? 'active' : ''}`} key={note.id} onClick={() => setActiveNote(note.id)}><FileText size={14} /><span>{note.title}</span></button>)}</div>}</div>; })}
+        {notes.filter((note) => !note.folderId).map((note) => <button className={`tree-document root-document ${activeNoteId === note.id && activeView === 'note' ? 'active' : ''}`} key={note.id} onClick={() => setActiveNote(note.id)}><FileText size={14} /><span>{note.title}</span></button>)}
       </div>
-
-      <nav className="sidebar-nav" aria-label="Workspace">
-        <input className="sidebar-search" type="search" aria-label="Search notes" placeholder="Search notes…" value={query} onChange={(event) => setQuery(event.target.value)} />
-        <button className={activeView === 'calendar' ? 'active' : ''} onClick={() => setActiveView('calendar')}><CalendarDays size={16} /><span>Calendar</span></button>
-        <button className={activeView === 'gym' ? 'active' : ''} onClick={() => setActiveView('gym')}><Dumbbell size={16} /><span>Gym</span></button>
-      </nav>
-
-      <div className="sidebar-section-heading"><span>Projects</span><button aria-label="Add project" onClick={() => { const title = window.prompt('Project name'); if (title?.trim()) addProject({ id: crypto.randomUUID(), title: title.trim(), emoji: '◆', context: [] }); }}><Plus size={15} /></button></div>
-      <div className="project-list">
-        {grouped.map(({ project, notes: projectNotes, folders: projectFolders }) => {
-          const isCollapsed = collapsed.includes(project.id);
-          return <div key={project.id} className="project-group">
-            <button className="project-row" onDoubleClick={() => { const first = projectNotes[0]; if (first) setActiveNote(first.id); setActiveView('context'); }} onClick={() => setCollapsed(isCollapsed ? collapsed.filter((id) => id !== project.id) : [...collapsed, project.id])} title="Double-click to edit project memory">
-              {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-              <span className="project-emoji">{project.emoji}</span><span>{project.title}</span>
-              <Plus className="row-action" size={14} onClick={(event) => { event.stopPropagation(); const title = window.prompt(`New note in ${project.title}`); if (title?.trim()) addNote({ id: crypto.randomUUID(), title: title.trim(), emoji: '◇', projectId: project.id, updatedAt: Date.now(), blocks: [], strokes: [] }); }} />
-            </button>
-            {!isCollapsed && <div className="project-notes">
-              {projectNotes.filter((note) => !note.folderId).map((note) => <button key={note.id} className={`note-row ${note.id === activeNoteId && activeView === 'note' ? 'active' : ''}`} onClick={() => setActiveNote(note.id)}>
-                <FileText size={14} /><span>{note.title}</span>
-              </button>)}
-              {projectFolders.map((folder) => <div className="folder-group" key={folder.id}><button className="note-row folder-row" onDoubleClick={() => { const first = projectNotes.find((note) => note.folderId === folder.id); if (first) setActiveNote(first.id); setActiveView('context'); }}><Folder size={14} /><span>{folder.title}</span></button><div className="folder-notes">{projectNotes.filter((note) => note.folderId === folder.id).map((note) => <button key={note.id} className={`note-row ${note.id === activeNoteId && activeView === 'note' ? 'active' : ''}`} onClick={() => setActiveNote(note.id)}><FileText size={13} /><span>{note.title}</span></button>)}</div></div>)}
-            </div>}
-          </div>;
-        })}
-      </div>
-
-      <div className="sidebar-bottom">
-        <button className="theme-toggle" onClick={toggleTheme} onDoubleClick={useSystemTheme} aria-label={theme === 'dark' ? 'Use light theme' : 'Use dark theme'} title={`${theme === 'dark' ? 'Use light theme' : 'Use dark theme'}${followsSystem ? ' · Following system' : ' · Double-click to follow system'}`}>{theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}<span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span></button>
-        <button className={activeView === 'settings' ? 'active' : ''} onClick={() => setActiveView('settings')}><Settings size={16} /><span>Settings</span></button>
-        <button><CircleHelp size={16} /><span>Help & shortcuts</span></button>
-        <div className="storage-meter"><div><span>Local workspace</span><span>12 MB</span></div><div className="meter"><span /></div></div>
-      </div>
-    </aside>
-  );
+    </div> : <p className="project-tree-empty">Project not found.</p>}
+  </aside>;
 }

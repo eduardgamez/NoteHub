@@ -32,7 +32,8 @@ export function CalendarView() {
   const [creating, setCreating] = useState(false);
   const [creationKind, setCreationKind] = useState<'event' | 'reminder'>('event');
   const [templateId, setTemplateId] = useState('');
-  const [selectedTask, setSelectedTask] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [selectedTask, setSelectedTask] = useState<{ id: string; x: number; y: number; above: boolean; maxHeight: number } | null>(null);
+  const [hoveredReminder, setHoveredReminder] = useState<{ title: string; x: number; y: number; side: 'left' | 'right' } | null>(null);
   const taskPopoverRef = useRef<HTMLFormElement>(null);
   const [reminderDraft, setReminderDraft] = useState({ title: '', due: '' });
   const [newChecklistItem, setNewChecklistItem] = useState('');
@@ -55,9 +56,18 @@ export function CalendarView() {
 
   function openTask(task: Task, element: HTMLElement) {
     const rect = element.getBoundingClientRect();
+    const spaceAbove = Math.max(0, rect.top - 20);
+    const spaceBelow = Math.max(0, window.innerHeight - rect.bottom - 20);
+    const above = spaceBelow < 420 && spaceAbove > spaceBelow;
     setReminderDraft({ title: task.title, due: task.due && !Number.isNaN(new Date(task.due).getTime()) ? localInputValue(new Date(task.due)) : '' });
     setNewChecklistItem('');
-    setSelectedTask({ id: task.id, x: Math.max(12, Math.min(rect.left, window.innerWidth - 312)), y: rect.bottom + 360 > window.innerHeight ? Math.max(12, rect.top - 360) : rect.bottom + 8 });
+    setSelectedTask({ id: task.id, x: Math.max(12, Math.min(rect.left, window.innerWidth - 312)), y: above ? rect.top - 8 : rect.bottom + 8, above, maxHeight: Math.min(420, above ? spaceAbove : spaceBelow) });
+  }
+
+  function showReminderTooltip(task: Task, element: HTMLElement) {
+    const rect = element.getBoundingClientRect();
+    const side = rect.right + 228 < window.innerWidth ? 'right' : 'left';
+    setHoveredReminder({ title: task.title, x: side === 'right' ? rect.right + 8 : rect.left - 8, y: Math.max(20, Math.min(rect.top + rect.height / 2, window.innerHeight - 20)), side });
   }
 
   function saveReminder(event: React.FormEvent) {
@@ -95,32 +105,35 @@ export function CalendarView() {
       <div><h1>Calendar</h1></div>
       <div className="module-actions">
         <div className="segmented">{(['day', 'week', 'month'] as CalendarMode[]).map((item) => <button key={item} className={mode === item ? 'active' : ''} onClick={() => setMode(item)}>{item}</button>)}</div>
-        <button className="secondary-button" onClick={() => setCursor(new Date())}>Today</button>
         <button className="icon-button" onClick={() => move(-1)}><ChevronLeft size={16} /></button><button className="icon-button" onClick={() => move(1)}><ChevronRight size={16} /></button>
-        <button className="primary-button" onClick={() => setCreating(true)}><Plus size={15} /> Create</button>
+        <button className="icon-button calendar-create" aria-label="Create" title="Create event or reminder" onClick={() => setCreating(true)}><Plus size={17} /></button>
       </div>
     </div>
 
-    {mode === 'month' ? <MonthGrid cursor={cursor} events={events} reminders={datedTasks} onOpenReminder={openTask} /> : <div className={`week-calendar ${mode}`}>
+    {mode === 'month' ? <MonthGrid cursor={cursor} events={events} reminders={datedTasks} onOpenReminder={openTask} onHoverReminder={showReminderTooltip} onLeaveReminder={() => setHoveredReminder(null)} /> : <div className={`week-calendar ${mode}`}>
       <div className="calendar-corner" />
       {days.map((day) => <div key={day.toISOString()} className={`day-heading ${sameDay(day, new Date()) ? 'today' : ''}`}><span>{dayName.format(day)}</span><strong>{day.getDate()}</strong></div>)}
+      <div className="calendar-prehour" aria-hidden="true" />
+      {days.map((day) => <div className="calendar-prehour calendar-prehour-day" aria-hidden="true" key={`pre-${day.toISOString()}`} />)}
       <div className="time-column">{hours.map((hour) => <span key={hour}>{String(hour).padStart(2, '0')}:00</span>)}</div>
       {days.map((day) => <div className="day-column" key={day.toISOString()}>{hours.map((hour) => <div className="hour-line" key={hour} />)}
         {events.filter((event) => sameDay(new Date(event.start), day)).map((event) => {
           const eventStart = new Date(event.start), eventEnd = new Date(event.end);
-          const top = ((eventStart.getHours() + eventStart.getMinutes() / 60) - 8) * 58;
-          const height = Math.max(30, ((eventEnd.getTime() - eventStart.getTime()) / 3600000) * 58);
+          const top = `clamp(2px, ${((eventStart.getHours() + eventStart.getMinutes() / 60) - 8) / hours.length * 100}%, calc(100% - 22px))`;
+          const height = `max(22px, ${(eventEnd.getTime() - eventStart.getTime()) / 3600000 / hours.length * 100}%)`;
           return <button key={event.id} className={`calendar-event ${event.color}`} style={{ top, height }} onDoubleClick={() => removeEvent(event.id)} title="Double-click to delete"><strong>{event.title}</strong><span><Clock3 size={10} /> {eventStart.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></button>;
         })}
         {datedTasks.filter((task) => sameDay(new Date(task.due!), day)).map((task, index) => {
           const date = new Date(task.due!);
-          const top = Math.max(2, Math.min(786, ((date.getHours() + date.getMinutes() / 60) - 8) * 58 + index * 22));
-          return <button key={task.id} className={`calendar-reminder ${task.done ? 'done' : ''}`} style={{ top }} onClick={(event) => openTask(task, event.currentTarget)} title={`${task.title} · ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}><Bell size={11} /><span>{task.title}</span></button>;
+          const top = `clamp(2px, calc(${((date.getHours() - 8 + 0.5) / hours.length) * 100}% - 9.5px + ${index * 22}px), calc(100% - 20px))`;
+          return <button key={task.id} className={`calendar-reminder ${task.done ? 'done' : ''}`} style={{ top }} onMouseEnter={(event) => showReminderTooltip(task, event.currentTarget)} onMouseLeave={() => setHoveredReminder(null)} onFocus={(event) => showReminderTooltip(task, event.currentTarget)} onBlur={() => setHoveredReminder(null)} onClick={(event) => { setHoveredReminder(null); openTask(task, event.currentTarget); }} aria-label={`Reminder: ${task.title}`}><Bell size={13} fill="currentColor" /></button>;
         })}
       </div>)}
     </div>}
 
-    {selectedTask && activeTask && <form ref={taskPopoverRef} className="reminder-popover" role="dialog" aria-label="Manage reminder" style={{ left: selectedTask.x, top: selectedTask.y }} onSubmit={saveReminder}>
+    {hoveredReminder && <div className="reminder-tooltip" role="tooltip" style={{ left: hoveredReminder.x, top: hoveredReminder.y, transform: `translate(${hoveredReminder.side === 'right' ? '0' : '-100%'}, -50%)` }}>{hoveredReminder.title}</div>}
+
+    {selectedTask && activeTask && <form ref={taskPopoverRef} className="reminder-popover" role="dialog" aria-label="Manage reminder" style={{ left: selectedTask.x, top: selectedTask.y, maxHeight: selectedTask.maxHeight, transform: selectedTask.above ? 'translateY(-100%)' : undefined }} onSubmit={saveReminder}>
       <div className="reminder-popover-heading"><span><Bell size={14} /> {activeTask.reminder ? 'Reminder' : 'Task'}</span><button type="button" aria-label="Close reminder" onClick={() => setSelectedTask(null)}><X size={15} /></button></div>
       <label>Title<input value={reminderDraft.title} onChange={(event) => setReminderDraft({ ...reminderDraft, title: event.target.value })} required /></label>
       <label>When<input type="datetime-local" value={reminderDraft.due} onChange={(event) => setReminderDraft({ ...reminderDraft, due: event.target.value })} /></label>
@@ -139,7 +152,7 @@ export function CalendarView() {
   </div>;
 }
 
-function MonthGrid({ cursor, events, reminders, onOpenReminder }: { cursor: Date; events: CalendarEvent[]; reminders: Task[]; onOpenReminder: (task: Task, element: HTMLElement) => void }) {
+function MonthGrid({ cursor, events, reminders, onOpenReminder, onHoverReminder, onLeaveReminder }: { cursor: Date; events: CalendarEvent[]; reminders: Task[]; onOpenReminder: (task: Task, element: HTMLElement) => void; onHoverReminder: (task: Task, element: HTMLElement) => void; onLeaveReminder: () => void }) {
   const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
   const gridStart = monday(first);
   const days = Array.from({ length: 42 }, (_, index) => { const day = new Date(gridStart); day.setDate(day.getDate() + index); return day; });
@@ -147,7 +160,7 @@ function MonthGrid({ cursor, events, reminders, onOpenReminder }: { cursor: Date
     {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => <div className="month-weekday" key={day}>{day}</div>)}
     {days.map((day) => <div className={`month-day ${day.getMonth() !== cursor.getMonth() ? 'outside' : ''} ${sameDay(day, new Date()) ? 'today' : ''}`} key={day.toISOString()}><strong>{day.getDate()}</strong>
       {events.filter((event) => sameDay(new Date(event.start), day)).slice(0, 3).map((event) => <span className={`month-event ${event.color}`} key={event.id}>{event.title}</span>)}
-      {reminders.filter((task) => sameDay(new Date(task.due!), day)).map((task) => <button className={`month-reminder ${task.done ? 'done' : ''}`} key={task.id} onClick={(event) => onOpenReminder(task, event.currentTarget)}><Bell size={10} /><span>{task.title}</span></button>)}
+      {reminders.filter((task) => sameDay(new Date(task.due!), day)).map((task) => <button className={`month-reminder ${task.done ? 'done' : ''}`} key={task.id} onMouseEnter={(event) => onHoverReminder(task, event.currentTarget)} onMouseLeave={onLeaveReminder} onFocus={(event) => onHoverReminder(task, event.currentTarget)} onBlur={onLeaveReminder} onClick={(event) => { onLeaveReminder(); onOpenReminder(task, event.currentTarget); }} aria-label={`Reminder: ${task.title}`}><Bell size={12} fill="currentColor" /></button>)}
     </div>)}
   </div>;
 }

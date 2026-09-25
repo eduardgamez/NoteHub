@@ -27,7 +27,11 @@ const configured = () => ({
 });
 
 app.get('/api/health', (_request, response) => response.json({ ok: true, authRequired: requireAuth }));
-app.get('/api/ai/status', (_request, response) => response.json({ providers: configured() }));
+app.get('/api/ai/status', (_request, response) => response.json({ providers: configured(), models: {
+  openai: process.env.OPENAI_MODEL ?? 'gpt-5-mini',
+  anthropic: process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-5-20250929',
+  gemini: process.env.GEMINI_MODEL ?? 'gemini-3-flash-preview',
+} }));
 
 app.post('/api/ai/complete', async (request, response, next) => {
   if (!requireAuth) { next(); return; }
