@@ -95,6 +95,16 @@ export const cloudSync = {
     const { error } = await client.auth.verifyOtp({ token_hash, type: type as EmailOtpType });
     if (error) throw error;
   },
+  async setPassword(password: string) {
+    if (!client) throw new Error('Supabase is not configured.');
+    const { error } = await client.auth.updateUser({ password });
+    if (error) throw error;
+  },
+  async signInWithPassword(email: string, password: string) {
+    if (!client) throw new Error('Supabase is not configured.');
+    const { error } = await client.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+  },
   async signOut() { if (client) await client.auth.signOut(); },
   async loadSnapshot(): Promise<WorkspaceStateData | null> {
     if (!client) return null;

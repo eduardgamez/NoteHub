@@ -69,9 +69,9 @@ VITE_SUPABASE_PUBLISHABLE_KEY=...
 ```
 
 4. Build and publish the web app over HTTPS. Add its URL as the **Site URL** in Supabase Authentication settings.
-5. On the computer, open **Settings → Multi-device sync**, enter your email, and copy the verification link from the email into NoteHub without opening it. Wait for the first cloud snapshot (about 10 seconds). Repeat with the same email on the iPad. If you configure the [Supabase email templates](https://supabase.com/docs/guides/auth/auth-email-templates) to show `{{ .Token }}` instead, NoteHub also accepts that code.
+5. On the computer, open **Settings → Multi-device sync**, enter your email, and copy the verification link from the email into NoteHub without opening it. Wait for the first cloud snapshot (about 10 seconds). While signed in, set a sync password in the same Settings section. On the iPad, use **Use password** with the same email and password, without requesting another email. If you configure the [Supabase email templates](https://supabase.com/docs/guides/auth/auth-email-templates) to show `{{ .Token }}` instead, NoteHub also accepts that code.
 
-On iPad, open the published URL in Safari and choose **Share → Add to Home Screen**. Paste the verification link inside that installed app; its session is separate from Safari's. Existing local notes on the first device become the initial cloud workspace. If an account already has a cloud workspace, signing in loads that workspace on the device.
+On iPad, open the published URL in Safari and choose **Share → Add to Home Screen**. Sign in inside that installed app; its session is separate from Safari's. Existing local notes on the first device become the initial cloud workspace. If an account already has a cloud workspace, signing in loads that workspace on the device.
 
 The migration enables row-level security, so each authenticated user can read and write only their own operation log and snapshot. Local edits remain optimistic; offline operations are queued in IndexedDB and replayed after authentication/reconnection. Realtime changes are granular (block, stroke, context, event, task, workout, exercise, chat, or proposal), while a debounced snapshot bootstraps a new device.
 
