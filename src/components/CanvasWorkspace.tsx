@@ -175,8 +175,10 @@ export function CanvasWorkspace() {
     };
     const target = candidates.reduce((closest, element) => distance(element) < distance(closest) ? element : closest);
     const bounds = target.getBoundingClientRect();
-    const sideMargin = 34;
-    const side = !target.classList.contains('title-block') && clientY >= bounds.top - sideMargin && clientY <= bounds.bottom + sideMargin && (clientX < bounds.left + bounds.width * .24 || clientX > bounds.right - bounds.width * .24);
+    const drawingTarget = target.classList.contains('type-drawing');
+    const sideMargin = drawingTarget ? 48 : 34;
+    const sideZone = drawingTarget ? .38 : .24;
+    const side = !target.classList.contains('title-block') && clientY >= bounds.top - sideMargin && clientY <= bounds.bottom + sideMargin && (clientX < bounds.left + bounds.width * sideZone || clientX > bounds.right - bounds.width * sideZone);
     const before = side ? clientX < bounds.left + bounds.width / 2 : clientY < bounds.top + bounds.height / 2;
     drag.targetId = target.dataset.blockId;
     drag.before = before;
