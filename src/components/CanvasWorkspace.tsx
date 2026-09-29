@@ -171,9 +171,13 @@ export function CanvasWorkspace() {
       const rect = element.getBoundingClientRect();
       const horizontalGap = Math.max(rect.left - clientX, 0, clientX - rect.right);
       const verticalGap = Math.max(rect.top - clientY, 0, clientY - rect.bottom);
-      return verticalGap * 4 + horizontalGap * .1;
+      return { verticalGap, horizontalGap };
     };
-    const target = candidates.reduce((closest, element) => distance(element) < distance(closest) ? element : closest);
+    const target = candidates.reduce((closest, element) => {
+      const next = distance(element);
+      const current = distance(closest);
+      return next.verticalGap < current.verticalGap || (next.verticalGap === current.verticalGap && next.horizontalGap < current.horizontalGap) ? element : closest;
+    });
     const bounds = target.getBoundingClientRect();
     const drawingTarget = target.classList.contains('type-drawing');
     const sideMargin = drawingTarget ? 48 : 34;
