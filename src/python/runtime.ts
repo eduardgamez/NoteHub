@@ -9,7 +9,7 @@ export interface PythonRuntime {
 }
 
 class PyodideWorkerRuntime implements PythonRuntime {
-  private worker = new Worker('/pyodide-worker.mjs', { type: 'module' });
+  private worker = new Worker(`${import.meta.env.BASE_URL}pyodide-worker.mjs`, { type: 'module' });
   private pending = new Map<string, PendingRun>();
 
   constructor() {

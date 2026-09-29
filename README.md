@@ -61,16 +61,23 @@ AI permissions are opt-in switches in Settings. Read-only answers run immediatel
 
 1. Create a Supabase project.
 2. Run `supabase/migrations/001_workspace_operations.sql` in its SQL editor or through the Supabase CLI.
-3. Put the project URL and anon key in `.env`:
+3. Put the project URL and publishable key in `.env`:
 
 ```dotenv
 VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
-VITE_SUPABASE_ANON_KEY=...
+VITE_SUPABASE_PUBLISHABLE_KEY=...
 ```
 
-4. Restart the app, open **Settings → Cloud sync**, and request a magic link.
+4. Build and publish the web app over HTTPS. Add its URL as the **Site URL** in Supabase Authentication settings.
+5. On the computer, open **Settings → Multi-device sync**, enter your email, and copy the verification link from the email into NoteHub without opening it. Wait for the first cloud snapshot (about 10 seconds). Repeat with the same email on the iPad. If you configure the [Supabase email templates](https://supabase.com/docs/guides/auth/auth-email-templates) to show `{{ .Token }}` instead, NoteHub also accepts that code.
+
+On iPad, open the published URL in Safari and choose **Share → Add to Home Screen**. Paste the verification link inside that installed app; its session is separate from Safari's. Existing local notes on the first device become the initial cloud workspace. If an account already has a cloud workspace, signing in loads that workspace on the device.
 
 The migration enables row-level security, so each authenticated user can read and write only their own operation log and snapshot. Local edits remain optimistic; offline operations are queued in IndexedDB and replayed after authentication/reconnection. Realtime changes are granular (block, stroke, context, event, task, workout, exercise, chat, or proposal), while a debounced snapshot bootstraps a new device.
+
+### GitHub Pages for the web app
+
+The workflow in `.github/workflows/pages.yml` builds the Vite app at `/NoteHub/` and publishes it with GitHub Pages. In the repository's **Settings → Secrets and variables → Actions**, add a repository secret named `SUPABASE_PUBLISHABLE_KEY` with the project's `sb_publishable_...` key. In **Settings → Pages**, select **GitHub Actions** as the publishing source. The workflow runs on pushes to `main` and can also be run manually. This static deployment supports notes, drawing, Supabase sync, and offline use; AI requests need the separate `/api` broker described above.
 
 ## PWA and Python notes
 

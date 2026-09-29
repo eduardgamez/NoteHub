@@ -14,7 +14,7 @@ export function PWAStatus() {
     window.addEventListener('beforeinstallprompt', captureInstall);
     navigator.serviceWorker?.addEventListener('controllerchange', refreshAfterActivation);
     if ('serviceWorker' in navigator && import.meta.env.PROD) {
-      void navigator.serviceWorker.register('/sw.js').then((registration) => {
+      void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).then((registration) => {
         if (registration.waiting) setWaiting(registration.waiting);
         registration.addEventListener('updatefound', () => {
           const worker = registration.installing;

@@ -31,31 +31,33 @@ export function InkLayer({ noteId, mode, toWorld, layout, moving }: InkLayerProp
   const inkWidth = useWorkspace((state) => state.inkWidth);
   const inkColor = useWorkspace((state) => state.inkColor);
   const [current, setCurrent] = useState<Point[]>([]);
-  const drawing = useRef(false);
+  const activePointer = useRef<number | null>(null);
 
   const visible = useMemo(() => strokes.map((stroke) => projectStroke(stroke, blocks, layout)).filter((stroke) => stroke !== null), [strokes, blocks, layout]);
 
   function pointerDown(event: React.PointerEvent<SVGSVGElement>) {
     if (event.shiftKey) return;
     if (mode !== 'ink' && mode !== 'eraser') return;
+    if (activePointer.current !== null) return;
     event.preventDefault();
-    if (mode === 'eraser') { eraseAt(toWorld(event.clientX, event.clientY)); return; }
-    drawing.current = true;
+    activePointer.current = event.pointerId;
     event.currentTarget.setPointerCapture(event.pointerId);
-    setCurrent([toWorld(event.clientX, event.clientY)]);
+    if (mode === 'eraser') { eraseAt(toWorld(event.clientX, event.clientY)); return; }
+    setCurrent([{ ...toWorld(event.clientX, event.clientY), pressure: event.pressure }]);
   }
 
   function pointerMove(event: React.PointerEvent<SVGSVGElement>) {
-    if (mode === 'eraser') { if (event.buttons) eraseAt(toWorld(event.clientX, event.clientY)); return; }
-    if (!drawing.current) return;
+    if (activePointer.current !== event.pointerId) return;
+    if (mode === 'eraser') { eraseAt(toWorld(event.clientX, event.clientY)); return; }
     const events = event.nativeEvent.getCoalescedEvents?.() ?? [event.nativeEvent];
     setCurrent((points) => [...points, ...events.map((item) => ({ ...toWorld(item.clientX, item.clientY), pressure: item.pressure }))]);
   }
 
   function pointerUp(event: React.PointerEvent<SVGSVGElement>) {
-    if (!drawing.current || !current.length) return;
-    drawing.current = false;
-    event.currentTarget.releasePointerCapture(event.pointerId);
+    if (activePointer.current !== event.pointerId) return;
+    activePointer.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    if (mode === 'eraser' || !current.length) return;
     const xs = current.map((point) => point.x), ys = current.map((point) => point.y);
     const anchor = nearestBlock(current[0], blocks, layout);
     if (anchor) {

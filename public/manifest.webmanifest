@@ -2,13 +2,14 @@
   "name": "NoteHub",
   "short_name": "NoteHub",
   "description": "A calm, flexible workspace for notes, code, ink, plans, and AI.",
-  "start_url": "/",
+  "start_url": ".",
+  "scope": ".",
   "display": "standalone",
   "background_color": "#f7f7f5",
   "theme_color": "#f7f7f5",
   "icons": [
-    { "src": "/notehub-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/notehub-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/notehub-mark.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+    { "src": "notehub-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "notehub-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "notehub-mark.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
   ]
 }

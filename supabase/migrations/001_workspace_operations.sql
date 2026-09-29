@@ -11,6 +11,7 @@ create index if not exists workspace_operations_user_created_idx
   on public.workspace_operations (user_id, created_at);
 
 alter table public.workspace_operations enable row level security;
+grant select, insert on public.workspace_operations to authenticated;
 
 create policy "users read own workspace operations"
   on public.workspace_operations for select
@@ -29,6 +30,7 @@ create table if not exists public.workspace_snapshots (
 );
 
 alter table public.workspace_snapshots enable row level security;
+grant select, insert, update on public.workspace_snapshots to authenticated;
 create policy "users read own workspace snapshot" on public.workspace_snapshots for select using (auth.uid() = user_id);
 create policy "users insert own workspace snapshot" on public.workspace_snapshots for insert with check (auth.uid() = user_id);
 create policy "users update own workspace snapshot" on public.workspace_snapshots for update using (auth.uid() = user_id) with check (auth.uid() = user_id);

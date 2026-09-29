@@ -20,6 +20,8 @@ export function SettingsView() {
   const [checking, setChecking] = useState(true);
   const [syncStatus, setSyncStatus] = useState<CloudSyncStatus>({ configured: cloudSync.configured, connected: false });
   const [email, setEmail] = useState('');
+  const [emailProof, setEmailProof] = useState('');
+  const [codeSent, setCodeSent] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
   const [permissions, setPermissions] = useState<AIPermissions>(getAIPermissions);
   const [codexLogin, setCodexLogin] = useState<CodexLoginState>({ status: 'idle' });
@@ -68,7 +70,15 @@ export function SettingsView() {
   function togglePermission(key: keyof AIPermissions) { const next = { ...permissions, [key]: !permissions[key] }; setPermissions(next); saveAIPermissions(next); }
   async function connect(event: React.FormEvent) {
     event.preventDefault(); setSyncMessage('');
-    try { await cloudSync.sendMagicLink(email); setSyncMessage('Check your email for the secure sign-in link.'); } catch (error) { setSyncMessage(error instanceof Error ? error.message : 'Could not send sign-in link.'); }
+    try { await cloudSync.sendEmailCode(email); setCodeSent(true); setSyncMessage('Copy the link from the email and paste it below without opening it. If your email has a code, you can enter that instead.'); } catch (error) { setSyncMessage(error instanceof Error ? error.message : 'Could not send sign-in email.'); }
+  }
+  async function verifyEmail(event: React.FormEvent) {
+    event.preventDefault(); setSyncMessage('');
+    try {
+      if (/^https?:\/\//i.test(emailProof.trim())) await cloudSync.verifyEmailLink(emailProof);
+      else await cloudSync.verifyEmailCode(email, emailProof.trim());
+      window.location.reload();
+    } catch (error) { setSyncMessage(error instanceof Error ? error.message : 'Could not verify email.'); }
   }
 
   return <div className="module-view settings-view"><div className="module-header"><div><p className="eyebrow">WORKSPACE</p><h1>Settings</h1><p>Appearance, secure AI providers, and synchronization.</p></div></div>
@@ -88,7 +98,7 @@ export function SettingsView() {
       ['readCurrentFile', 'Read current file'], ['searchFiles', 'Search other files'], ['readProjectContext', 'Read project memory'], ['inspectCalendar', 'Inspect calendar & tasks'], ['inspectGym', 'Inspect gym history'],
     ] as Array<[keyof AIPermissions, string]>).map(([key, label]) => <label key={key}><span>{label}</span><button className={permissions[key] ? 'enabled' : ''} onClick={() => togglePermission(key)} aria-pressed={permissions[key]}><i /></button></label>)}</div></section>
     <section className="settings-section sync-settings"><div className="settings-copy"><div className="settings-icon"><Cloud size={18} /></div><div><h2>Multi-device sync</h2><p>{syncStatus.connected ? `Signed in as ${syncStatus.email}. Changes sync live and offline operations remain queued.` : syncStatus.configured ? 'Sign in with the same email on every device to share the workspace.' : 'Local-first mode is active. Configure Supabase to enable real-time device sync.'}</p></div></div>
-      {syncStatus.connected ? <button className="secondary-button" onClick={() => void cloudSync.signOut().then(() => setSyncStatus({ configured: true, connected: false }))}>Sign out</button> : syncStatus.configured ? <form onSubmit={connect}><input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /><button className="primary-button">Email sign-in link</button>{syncMessage && <small>{syncMessage}</small>}</form> : <div className="status-chip"><Server size={14} /> Local only</div>}
+      {syncStatus.connected ? <button className="secondary-button" onClick={() => void cloudSync.signOut().then(() => setSyncStatus({ configured: true, connected: false }))}>Sign out</button> : syncStatus.configured ? <form onSubmit={codeSent ? verifyEmail : connect}><input type="email" required value={email} onChange={(event) => { setEmail(event.target.value); setCodeSent(false); }} placeholder="you@example.com" />{codeSent && <input type="text" autoComplete="one-time-code" required value={emailProof} onChange={(event) => setEmailProof(event.target.value)} placeholder="Paste email link or code" aria-label="Email link or code" />}<button className="primary-button">{codeSent ? 'Verify email' : 'Send sign-in email'}</button>{syncMessage && <small>{syncMessage}</small>}</form> : <div className="status-chip"><Server size={14} /> Local only</div>}
     </section>
   </div>;
 }

@@ -627,7 +627,7 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
     try {
       const stored = await loadWorkspace();
       const remote = await cloudSync.loadSnapshot();
-      const data = stored ? migrate(stored) : remote ? migrate(remote) : { ...seedWorkspace, notes: Object.fromEntries(Object.entries(seedWorkspace.notes).map(([id, note]) => [id, ensureTitleBlock(note)])) };
+      const data = remote ? migrate(remote) : stored ? migrate(stored) : { ...seedWorkspace, notes: Object.fromEntries(Object.entries(seedWorkspace.notes).map(([id, note]) => [id, ensureTitleBlock(note)])) };
       set({ ...data, activeProjectId: data.notes[data.activeNoteId]?.projectId ?? data.projects[0]?.id ?? '', hydrated: true });
       const source = stored ?? remote;
       const hadDemoItems = Boolean(source?.calendarEvents?.some((event) => demoEventIds.has(event.id))

@@ -1,11 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { seedWorkspace } from '../data/seed';
+import { loadWorkspace } from '../lib/storage';
+import { cloudSync } from '../sync/cloudSync';
 import type { PendingProposal } from '../types';
 
 vi.mock('../lib/storage', () => ({ loadWorkspace: vi.fn(), scheduleSave: vi.fn() }));
 vi.mock('../sync/syncEngine', () => ({ syncEngine: { publish: vi.fn(), subscribe: vi.fn() } }));
 
 import { useWorkspace } from './useWorkspace';
+
+describe('workspace hydration across devices', () => {
+  it('loads the account workspace when this browser has local starter data', async () => {
+    const local = structuredClone(seedWorkspace);
+    const remote = structuredClone(seedWorkspace);
+    remote.projects = [...remote.projects, { id: 'synced-project', title: 'Synced project', emoji: '◇', context: [] }];
+    vi.mocked(loadWorkspace).mockResolvedValueOnce(local);
+    vi.spyOn(cloudSync, 'loadSnapshot').mockResolvedValueOnce(remote);
+    await useWorkspace.getState().hydrate();
+    expect(useWorkspace.getState().projects.some((project) => project.id === 'synced-project')).toBe(true);
+  });
+});
 
 const proposal: PendingProposal = {
   id: 'delete-proposal', threadId: 'test-thread', kind: 'file.block.delete', title: 'Delete block',
