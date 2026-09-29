@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { CircleHelp, Laptop, Moon, Search, Settings, Sun, X } from 'lucide-react';
+import { FileText, Laptop, Moon, Search, Settings, Sun, X } from 'lucide-react';
 import { useWorkspace } from '../store/useWorkspace';
 import { useTheme } from '../hooks/useTheme';
 
@@ -11,7 +11,6 @@ export function AppHeader() {
   const { theme, followsSystem, chooseTheme, useSystemTheme: restoreSystemTheme } = useTheme();
   const [query, setQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
-  const [helpOpen, setHelpOpen] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const results = query.trim() ? Object.values(notes).filter((note) => note.title.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())).slice(0, 8) : [];
 
@@ -36,9 +35,8 @@ export function AppHeader() {
     </div>
     <div className="header-actions">
       <button onClick={() => setActiveView('settings')} aria-label="Settings" title="Settings"><Settings size={20} /></button>
-      <button onClick={() => setHelpOpen(!helpOpen)} aria-label="Help" title="Help"><CircleHelp size={20} /></button>
+      <button onClick={() => setActiveView('profile')} aria-label="Perfil personal" title="Perfil personal"><FileText size={20} /></button>
       <button onClick={cycleTheme} aria-label="Change theme" title={followsSystem ? 'System theme' : `${theme} theme`}>{followsSystem ? <Laptop size={20} /> : theme === 'light' ? <Sun size={20} /> : <Moon size={20} />}</button>
     </div>
-    {helpOpen && <div className="header-help"><strong>Quick help</strong><p>Open a project to view its notes. Search by note title above. In a document, use the toolbar to add content or draw.</p><button onClick={() => setHelpOpen(false)}>Close</button></div>}
   </header>;
 }

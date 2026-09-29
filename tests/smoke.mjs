@@ -26,10 +26,9 @@ try {
   if (await page.locator('html').getAttribute('data-theme') !== 'light') throw new Error('Theme did not persist');
 
   await page.getByRole('button', { name: 'Open University' }).click();
-  await page.locator('.document-title h1', { hasText: 'Sensitivity analysis' }).waitFor();
-  if (await page.locator('.document-title > span').count()) throw new Error('Document title still has a symbol');
+  await page.locator('.title-block h1', { hasText: 'Sensitivity analysis' }).waitFor();
   await page.getByRole('button', { name: 'Cache memory' }).click();
-  await page.locator('.document-title h1', { hasText: 'Cache memory' }).waitFor();
+  await page.locator('.title-block h1', { hasText: 'Cache memory' }).waitFor();
   await page.getByRole('button', { name: 'Sensitivity analysis' }).click();
   const initialBlocks = await page.locator('.canvas-block').count();
   await page.getByTitle('Text block').click();
@@ -47,7 +46,12 @@ try {
   await page.getByRole('textbox', { name: 'New project title' }).fill('Design test');
   await page.getByLabel('Edit project').click();
   await page.getByRole('button', { name: 'Open Design test' }).waitFor();
+  await page.setViewportSize({ width: 900, height: 1000 });
+  const symbolBeforeEdit = await page.locator('.project-tile').first().locator('.project-symbol').boundingBox();
   await page.getByLabel('Edit project').click();
+  const symbolDuringEdit = await page.locator('.project-tile').first().locator('.project-symbol').boundingBox();
+  if (Math.abs(symbolBeforeEdit.y - symbolDuringEdit.y) > 0.5) throw new Error('Project symbols moved vertically in edit mode');
+  await page.setViewportSize({ width: 1440, height: 1000 });
   if (await page.getByLabel('Edit project').getAttribute('aria-pressed') !== 'true') throw new Error('Project edit mode did not activate');
   if (await page.getByRole('dialog', { name: 'Edit project' }).count()) throw new Error('Project edit opened a dialog');
   await page.getByRole('textbox', { name: 'Design test symbol' }).fill('🎨');
@@ -57,10 +61,11 @@ try {
   if (!await page.getByRole('button', { name: 'Open Renamed project' }).getByText('🎨').count()) throw new Error('Inline project symbol was not saved');
   await page.getByRole('button', { name: 'Open Renamed project' }).click();
   await page.getByText('Your project is ready').waitFor();
-  await page.getByRole('button', { name: 'Add folder or document' }).click();
-  page.once('dialog', (dialog) => dialog.accept('First document'));
-  await page.getByRole('button', { name: 'New document' }).click();
-  await page.locator('.document-title h1', { hasText: 'First document' }).waitFor();
+  await page.locator('.project-sidebar').click({ button: 'right', position: { x: 200, y: 500 } });
+  await page.getByRole('menuitem', { name: 'New document' }).click();
+  await page.getByRole('textbox', { name: 'New note name' }).fill('First document');
+  await page.getByRole('textbox', { name: 'New note name' }).press('Enter');
+  await page.locator('.title-block h1', { hasText: 'First document' }).waitFor();
   await page.getByRole('button', { name: 'Back to home' }).click();
   await page.getByLabel('Show project controls').click();
   await page.getByLabel('Add project').click();
@@ -89,7 +94,7 @@ try {
   await page.getByText('Using OpenAI gpt-5-mini', { exact: true }).waitFor();
   await page.getByLabel('Search in notes').fill('Cache memory');
   await page.locator('.header-search-results').getByRole('button', { name: /Cache memory/ }).click();
-  await page.locator('.document-title h1', { hasText: 'Cache memory' }).waitFor();
+  await page.locator('.title-block h1', { hasText: 'Cache memory' }).waitFor();
   await page.getByText('Using OpenAI gpt-5-mini', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'NoteHub home' }).click();
 

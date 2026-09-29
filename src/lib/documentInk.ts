@@ -3,6 +3,30 @@ import type { CanvasBlock, InkStroke, Point } from '../types';
 export interface DocumentRect { x: number; y: number; width: number; height: number }
 export type DocumentLayout = Record<string, DocumentRect>;
 
+export function strokeIntersectsRect(stroke: InkStroke, rect: DocumentRect): boolean {
+  const left = rect.x - stroke.width / 2;
+  const top = rect.y - stroke.width / 2;
+  const right = rect.x + rect.width + stroke.width / 2;
+  const bottom = rect.y + rect.height + stroke.width / 2;
+  const inside = (point: Point) => point.x >= left && point.x <= right && point.y >= top && point.y <= bottom;
+  if (stroke.points.some(inside)) return true;
+  for (let index = 1; index < stroke.points.length; index++) {
+    const first = stroke.points[index - 1];
+    const second = stroke.points[index];
+    let start = 0;
+    let end = 1;
+    const dx = second.x - first.x;
+    const dy = second.y - first.y;
+    for (const [p, q] of [[-dx, first.x - left], [dx, right - first.x], [-dy, first.y - top], [dy, bottom - first.y]]) {
+      if (p === 0) { if (q < 0) { start = 1; end = 0; break; } }
+      else if (p < 0) start = Math.max(start, q / p);
+      else end = Math.min(end, q / p);
+    }
+    if (start <= end) return true;
+  }
+  return false;
+}
+
 export function readDocumentLayout(page: HTMLElement): DocumentLayout {
   const pageRect = page.getBoundingClientRect();
   const layout: DocumentLayout = {};

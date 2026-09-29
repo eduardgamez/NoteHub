@@ -8,6 +8,7 @@ interface InkLayerProps {
   mode: ToolMode;
   toWorld: (clientX: number, clientY: number) => Point;
   layout: DocumentLayout;
+  moving?: { ids: string[]; dx: number; dy: number } | null;
 }
 
 function pathFrom(points: Point[]) {
@@ -22,18 +23,20 @@ function pathFrom(points: Point[]) {
   }, '');
 }
 
-export function InkLayer({ noteId, mode, toWorld, layout }: InkLayerProps) {
+export function InkLayer({ noteId, mode, toWorld, layout, moving }: InkLayerProps) {
   const strokes = useWorkspace((state) => state.notes[noteId].strokes);
   const blocks = useWorkspace((state) => state.notes[noteId].blocks);
   const addStroke = useWorkspace((state) => state.addStroke);
   const removeStroke = useWorkspace((state) => state.removeStroke);
   const inkWidth = useWorkspace((state) => state.inkWidth);
+  const inkColor = useWorkspace((state) => state.inkColor);
   const [current, setCurrent] = useState<Point[]>([]);
   const drawing = useRef(false);
 
   const visible = useMemo(() => strokes.map((stroke) => projectStroke(stroke, blocks, layout)).filter((stroke) => stroke !== null), [strokes, blocks, layout]);
 
   function pointerDown(event: React.PointerEvent<SVGSVGElement>) {
+    if (event.shiftKey) return;
     if (mode !== 'ink' && mode !== 'eraser') return;
     event.preventDefault();
     if (mode === 'eraser') { eraseAt(toWorld(event.clientX, event.clientY)); return; }
@@ -58,12 +61,12 @@ export function InkLayer({ noteId, mode, toWorld, layout }: InkLayerProps) {
     if (anchor) {
       const origin = layout[anchor.id];
       addStroke(noteId, {
-        id: crypto.randomUUID(), color: '#4d8f80', width: inkWidth, anchorBlockId: anchor.id, anchorOrigin: { x: origin.x, y: origin.y }, space: 'block',
+        id: crypto.randomUUID(), color: inkColor, width: inkWidth, anchorBlockId: anchor.id, anchorOrigin: { x: origin.x, y: origin.y }, space: 'block',
         points: current.map((point) => ({ ...point, x: point.x - origin.x, y: point.y - origin.y })),
         bounds: { x: Math.min(...xs) - 8 - origin.x, y: Math.min(...ys) - 8 - origin.y, width: Math.max(16, Math.max(...xs) - Math.min(...xs) + 16), height: Math.max(16, Math.max(...ys) - Math.min(...ys) + 16) },
       });
     } else addStroke(noteId, {
-      id: crypto.randomUUID(), color: '#4d8f80', width: inkWidth, space: 'document', points: current,
+      id: crypto.randomUUID(), color: inkColor, width: inkWidth, space: 'document', points: current,
       bounds: { x: Math.min(...xs) - 8, y: Math.min(...ys) - 8, width: Math.max(16, Math.max(...xs) - Math.min(...xs) + 16), height: Math.max(16, Math.max(...ys) - Math.min(...ys) + 16) },
     });
     setCurrent([]);
@@ -76,7 +79,7 @@ export function InkLayer({ noteId, mode, toWorld, layout }: InkLayerProps) {
 
   const active = mode === 'ink' || mode === 'eraser';
   return <svg className={`ink-layer ${active ? 'active' : ''} ${mode === 'eraser' ? 'eraser' : ''}`} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp}>
-    {visible.map((stroke) => <path key={stroke.id} d={pathFrom(stroke.points)} stroke={stroke.color} strokeWidth={stroke.width} fill="none" strokeLinecap="round" strokeLinejoin="round" />)}
-    {current.length > 0 && <path d={pathFrom(current)} stroke="#4d8f80" strokeWidth={inkWidth} fill="none" strokeLinecap="round" strokeLinejoin="round" />}
+    {visible.map((stroke) => <path key={stroke.id} d={pathFrom(stroke.points)} transform={moving?.ids.includes(stroke.id) ? `translate(${moving.dx} ${moving.dy})` : undefined} stroke={stroke.color} strokeWidth={stroke.width} fill="none" strokeLinecap="round" strokeLinejoin="round" />)}
+    {current.length > 0 && <path d={pathFrom(current)} stroke={inkColor} strokeWidth={inkWidth} fill="none" strokeLinecap="round" strokeLinejoin="round" />}
   </svg>;
 }

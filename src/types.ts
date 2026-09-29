@@ -16,11 +16,20 @@ export interface InkStroke {
 export interface CanvasBlock {
   id: string;
   type: BlockType;
+  isTitle?: boolean;
+  layoutGroupId?: string;
+  layoutColumnId?: string;
   x: number;
   y: number;
   width: number;
   height: number;
   content: string;
+  tableColumnWidths?: number[];
+  tableColumnCount?: number;
+  tableRowHeights?: number[];
+  tableRichText?: boolean;
+  checklistRichText?: boolean;
+  captionRichText?: boolean;
   language?: string;
   caption?: string;
   execution?: CodeExecution;
@@ -119,8 +128,13 @@ export interface Workout {
   exercises: WorkoutExerciseLog[];
 }
 
-export interface ChatMessageRecord { id: string; role: 'user' | 'assistant'; content: string; createdAt: number }
-export type ProposalKind = 'context.update' | 'calendar.create' | 'task.create' | 'file.update';
+export interface ChatMessageRecord { id: string; role: 'user' | 'assistant'; content: string; createdAt: number; sources?: Array<{ title: string; url: string }> }
+export interface AITextSelection { noteId: string; text: string; blockIds: string[] }
+export type ProfileField = 'classes' | 'routines' | 'events' | 'style' | 'background' | 'topics';
+export interface PersonalProfile { answers: Partial<Record<ProfileField, string>>; notes: string; updatedAt: number }
+export interface ProfileUpdate { field: ProfileField | 'notes'; value: string }
+export interface ChatSession { id: string; scope: string; title: string; createdAt: number; updatedAt: number; model?: string; profileSummary?: string; profileReadAt?: number }
+export type ProposalKind = 'context.update' | 'calendar.create' | 'task.create' | 'file.update' | 'file.block.create' | 'file.block.delete' | 'file.create';
 export interface PendingProposal {
   id: string;
   threadId: string;
@@ -134,7 +148,7 @@ export interface PendingProposal {
   createdAt: number;
 }
 
-export type AppView = 'note' | 'project' | 'calendar' | 'gym' | 'settings' | 'context';
+export type AppView = 'note' | 'project' | 'calendar' | 'gym' | 'settings' | 'context' | 'profile';
 
 export interface WorkspaceStateData {
   version: number;
@@ -149,7 +163,10 @@ export interface WorkspaceStateData {
   routines: Routine[];
   workouts: Workout[];
   chatThreads: Record<string, ChatMessageRecord[]>;
+  chatSessions: Record<string, ChatSession>;
+  activeChatIds: Record<string, string>;
   pendingProposals: PendingProposal[];
+  personalProfile: PersonalProfile;
 }
 
 export type ToolMode = 'select' | 'pan' | 'ink' | 'eraser';

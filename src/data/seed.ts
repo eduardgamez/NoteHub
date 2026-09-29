@@ -1,15 +1,5 @@
 import type { WorkspaceStateData } from '../types';
 
-const now = new Date();
-const startOfWeek = new Date(now);
-startOfWeek.setHours(0, 0, 0, 0);
-startOfWeek.setDate(now.getDate() - ((now.getDay() + 6) % 7));
-const at = (dayOffset: number, hour: number, minutes = 0) => {
-  const date = new Date(startOfWeek);
-  date.setDate(date.getDate() + dayOffset);
-  date.setHours(hour, minutes, 0, 0);
-  return date.toISOString();
-};
 const weeksAgo = (weeks: number) => {
   const date = new Date();
   date.setDate(date.getDate() - weeks * 7);
@@ -82,22 +72,9 @@ export const seedWorkspace: WorkspaceStateData = {
       blocks: [{ id: 'ideas-text', type: 'text', x: 120, y: 100, width: 500, height: 220, content: '<p class="eyebrow">PERSONAL</p><h1>Ideas & scraps</h1><p>A quiet place for things that do not have a home yet.</p>' }],
     },
   },
-  calendarEvents: [
-    { id: 'cal-lecture', title: 'IO lecture', start: at(0, 10), end: at(0, 12), color: 'green', projectId: 'university' },
-    { id: 'cal-gym', title: 'Upper A', start: at(1, 18), end: at(1, 19, 15), color: 'purple', projectId: 'gym' },
-    { id: 'cal-study', title: 'Sensitivity exercises', start: at(2, 16), end: at(2, 18), color: 'amber', projectId: 'university' },
-    { id: 'cal-architecture', title: 'Architecture lab', start: at(3, 9), end: at(3, 11), color: 'blue', projectId: 'university' },
-  ],
-  tasks: [
-    { id: 'task-io', title: 'Finish sensitivity worksheet', done: false, due: at(2, 20), projectId: 'university', checklist: [
-      { id: 'task-io-1', text: 'Exercise 4.3', done: true }, { id: 'task-io-2', text: 'Exercise 4.4', done: false },
-    ] },
-    { id: 'reminder-leaving', title: 'Leaving for university', done: false, due: at(1, 8), reminder: true, checklist: [
-      { id: 'keys', text: 'Keys', done: true }, { id: 'wallet', text: 'Wallet', done: false }, { id: 'laptop', text: 'Laptop', done: false }, { id: 'charger', text: 'Charger', done: false }, { id: 'water', text: 'Water', done: false },
-    ] },
-    { id: 'task-review', title: 'Review cache locality', done: true, projectId: 'university', checklist: [] },
-  ],
-  reminderTemplates: [{ id: 'template-university', title: 'Leaving for university', items: ['Keys', 'Wallet', 'Laptop', 'Charger', 'Water'] }],
+  calendarEvents: [],
+  tasks: [],
+  reminderTemplates: [],
   exercises: [
     { id: 'incline-db', name: 'Incline dumbbell press', category: 'Chest', equipment: 'Dumbbells' },
     { id: 'chest-row', name: 'Chest-supported row', category: 'Back', equipment: 'Machine' },
@@ -121,5 +98,8 @@ export const seedWorkspace: WorkspaceStateData = {
     ],
   })),
   chatThreads: {},
+  chatSessions: {},
+  activeChatIds: {},
   pendingProposals: [],
+  personalProfile: { answers: {}, notes: '', updatedAt: 0 },
 };

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Sparkles, X } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import { AIPanel } from './components/AIPanel';
 import { AppHeader } from './components/AppHeader';
 import { CanvasWorkspace } from './components/CanvasWorkspace';
@@ -9,6 +9,7 @@ import { Topbar } from './components/Topbar';
 import { GymView } from './components/modules/GymView';
 import { ContextView } from './components/modules/ContextView';
 import { SettingsView } from './components/modules/SettingsView';
+import { ProfileView } from './components/modules/ProfileView';
 import { PWAStatus } from './components/PWAStatus';
 import { useWorkspace, workspaceDataFrom } from './store/useWorkspace';
 import { syncEngine } from './sync/syncEngine';
@@ -24,7 +25,6 @@ export function App() {
   const activeProjectId = useWorkspace((state) => state.activeProjectId);
   const notes = useWorkspace((state) => state.notes);
   const activeNoteId = useWorkspace((state) => state.activeNoteId);
-  const addNote = useWorkspace((state) => state.addNote);
 
   useEffect(() => { void hydrate(); }, [hydrate]);
   useEffect(() => hydrated ? syncEngine.subscribe(applyRemote, () => workspaceDataFrom(useWorkspace.getState())) : undefined, [applyRemote, hydrated]);
@@ -37,10 +37,10 @@ export function App() {
     <AppHeader />
     {activeView === 'calendar' ? <HomeView /> : projectView ? <div className={`project-layout ${sidebarOpen ? '' : 'sidebar-collapsed'} ${aiOpen ? '' : 'ai-collapsed'}`}>
       {sidebarOpen && <Sidebar />}
-      <section className="project-workspace"><Topbar />{activeView === 'context' ? <ContextView /> : hasActiveDocument ? <CanvasWorkspace /> : <div className="project-empty"><h1>Your project is ready</h1><p>Add your first document to start writing.</p><button className="primary-button" onClick={() => { const title = window.prompt('Document name'); if (title?.trim()) addNote({ id: crypto.randomUUID(), title: title.trim(), emoji: '◇', projectId: activeProjectId, updatedAt: Date.now(), blocks: [], strokes: [] }); }}>Create document</button></div>}</section>
+      <section className="project-workspace"><Topbar />{activeView === 'context' ? <ContextView /> : hasActiveDocument ? <CanvasWorkspace /> : <div className="project-empty"><h1>Your project is ready</h1><p>Right-click empty space in Projects to create a folder or document.</p></div>}</section>
       {aiOpen && <AIPanel />}
-      <button className={`ai-panel-toggle ${aiOpen ? 'open' : ''}`} onClick={() => setAiOpen(!aiOpen)} aria-label={aiOpen ? 'Close AI panel' : 'Open AI panel'}>{aiOpen ? <X size={17} /> : <Sparkles size={17} />}</button>
-    </div> : <div className="standalone-view">{activeView === 'gym' ? <GymView /> : <SettingsView />}</div>}
+      {!aiOpen && <button className="ai-panel-toggle" onClick={() => setAiOpen(true)} aria-label="Open AI panel"><Sparkles size={17} /></button>}
+    </div> : <div className="standalone-view">{activeView === 'gym' ? <GymView /> : activeView === 'profile' ? <ProfileView /> : <SettingsView />}</div>}
     <PWAStatus />
   </div>;
 }

@@ -1,14 +1,18 @@
-import type { CalendarEvent, CanvasBlock, ChatMessageRecord, Exercise, Folder, FolderContext, InkStroke, Note, PendingProposal, Project, Task, Workout, WorkspaceStateData } from '../types';
+import type { CalendarEvent, CanvasBlock, ChatMessageRecord, ChatSession, Exercise, Folder, FolderContext, InkStroke, Note, PendingProposal, PersonalProfile, Project, Task, Workout, WorkspaceStateData } from '../types';
 import { cloudSync } from './cloudSync';
 
 export type SyncPayload =
   | { kind: 'project.upsert'; project: Project }
   | { kind: 'project.remove'; projectId: string }
   | { kind: 'folder.upsert'; folder: Folder }
+  | { kind: 'folder.remove'; folderId: string }
   | { kind: 'note.upsert'; note: Note }
-  | { kind: 'block.upsert'; noteId: string; block: CanvasBlock }
+  | { kind: 'note.remove'; noteId: string }
+  | { kind: 'block.upsert'; noteId: string; block: CanvasBlock; afterBlockId?: string }
+  | { kind: 'block.reorder'; noteId: string; blockId: string; targetId: string; before: boolean; side?: boolean }
   | { kind: 'block.remove'; noteId: string; blockId: string }
   | { kind: 'stroke.add'; noteId: string; stroke: InkStroke }
+  | { kind: 'stroke.move'; noteId: string; strokeIds: string[]; dx: number; dy: number }
   | { kind: 'stroke.remove'; noteId: string; strokeId: string }
   | { kind: 'stroke.clear'; noteId: string }
   | { kind: 'context.upsert'; projectId: string; item: FolderContext }
@@ -22,7 +26,10 @@ export type SyncPayload =
   | { kind: 'workout.upsert'; workout: Workout }
   | { kind: 'exercise.upsert'; exercise: Exercise }
   | { kind: 'chat.message'; threadId: string; message: ChatMessageRecord }
-  | { kind: 'proposal.upsert'; proposal: PendingProposal };
+  | { kind: 'chat.session.upsert'; session: ChatSession }
+  | { kind: 'chat.session.remove'; sessionId: string }
+  | { kind: 'proposal.upsert'; proposal: PendingProposal }
+  | { kind: 'profile.upsert'; profile: PersonalProfile };
 
 export type SyncOperation = SyncPayload & { source: string; timestamp: number; opId: string };
 const source = crypto.randomUUID();
