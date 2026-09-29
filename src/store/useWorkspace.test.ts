@@ -19,6 +19,15 @@ describe('workspace hydration across devices', () => {
     await useWorkspace.getState().hydrate();
     expect(useWorkspace.getState().projects.some((project) => project.id === 'synced-project')).toBe(true);
   });
+
+  it('keeps existing local notes when the cloud only has starter content', async () => {
+    const local = structuredClone(seedWorkspace);
+    local.projects = [...local.projects, { id: 'my-project', title: 'My notes', emoji: '◇', context: [] }];
+    vi.mocked(loadWorkspace).mockResolvedValueOnce(local);
+    vi.spyOn(cloudSync, 'loadSnapshot').mockResolvedValueOnce(structuredClone(seedWorkspace));
+    await useWorkspace.getState().hydrate();
+    expect(useWorkspace.getState().projects.some((project) => project.id === 'my-project')).toBe(true);
+  });
 });
 
 const proposal: PendingProposal = {

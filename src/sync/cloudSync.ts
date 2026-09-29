@@ -2,6 +2,7 @@ import { createClient, type EmailOtpType, type RealtimeChannel, type SupabaseCli
 import { get, set } from 'idb-keyval';
 import type { SyncOperation } from './syncEngine';
 import type { WorkspaceStateData } from '../types';
+import { isStarterWorkspace } from '../lib/starterWorkspace';
 
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const publishableKey = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? import.meta.env.VITE_SUPABASE_ANON_KEY) as string | undefined;
@@ -104,6 +105,7 @@ export const cloudSync = {
   scheduleSnapshot(data: WorkspaceStateData) {
     if (!client) return;
     window.clearTimeout(snapshotTimer);
+    if (isStarterWorkspace(data)) return;
     snapshotTimer = window.setTimeout(async () => {
       if (!client) return;
       const { data: { user } } = await client.auth.getUser(); if (!user) return;

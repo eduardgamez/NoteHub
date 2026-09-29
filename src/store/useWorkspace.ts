@@ -5,6 +5,7 @@ import { syncEngine, type SyncOperation } from '../sync/syncEngine';
 import { cloudSync } from '../sync/cloudSync';
 import { makeBlock } from '../lib/blockFactory';
 import { ensureTitleBlock, titleFromBlock } from '../lib/noteTitle';
+import { isStarterWorkspace } from '../lib/starterWorkspace';
 import { appendAIProfileText, migrateAIProfileText, profileSummary, validProfileUpdates } from '../ai/personalProfile';
 import type {
   AITextSelection, AppView, CalendarEvent, CanvasBlock, ChatMessageRecord, ChatSession, Exercise, Folder, FolderContext, InkStroke,
@@ -627,13 +628,16 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
     try {
       const stored = await loadWorkspace();
       const remote = await cloudSync.loadSnapshot();
-      const data = remote ? migrate(remote) : stored ? migrate(stored) : { ...seedWorkspace, notes: Object.fromEntries(Object.entries(seedWorkspace.notes).map(([id, note]) => [id, ensureTitleBlock(note)])) };
+      const localData = stored ? migrate(stored) : null;
+      const remoteData = remote ? migrate(remote) : null;
+      const keepLocal = Boolean(localData && remoteData && isStarterWorkspace(remoteData) && !isStarterWorkspace(localData));
+      const data = keepLocal ? localData! : remoteData ?? localData ?? { ...seedWorkspace, notes: Object.fromEntries(Object.entries(seedWorkspace.notes).map(([id, note]) => [id, ensureTitleBlock(note)])) };
       set({ ...data, activeProjectId: data.notes[data.activeNoteId]?.projectId ?? data.projects[0]?.id ?? '', hydrated: true });
       const source = stored ?? remote;
       const hadDemoItems = Boolean(source?.calendarEvents?.some((event) => demoEventIds.has(event.id))
         || source?.tasks?.some((task) => demoTaskIds.has(task.id))
         || source?.reminderTemplates?.some((template) => demoTemplateIds.has(template.id)));
-      if (!remote || hadDemoItems) persist(get());
+      if (!remote || keepLocal || hadDemoItems) persist(get());
     } catch { set({ hydrated: true }); }
   },
   applyRemote(operation) {
