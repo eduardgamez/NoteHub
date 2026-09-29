@@ -19,6 +19,7 @@ export function CanvasWorkspace() {
   const imageRef = useRef<HTMLInputElement>(null);
   const dragRef = useRef<{ blockId: string; startX: number; startY: number; clientX: number; clientY: number; targetId?: string; before?: boolean; side?: boolean } | null>(null);
   const marqueeRef = useRef<{ pointerId: number; start: Point; dragging: boolean } | null>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
   const inkMoveRef = useRef<{ pointerId: number; startX: number; startY: number; ids: string[] } | null>(null);
   const crossTextRangeRef = useRef<Range | null>(null);
   const crossTextToolsRef = useRef<HTMLDivElement>(null);
@@ -55,6 +56,21 @@ export function CanvasWorkspace() {
     if (focused instanceof HTMLElement && pageRef.current?.contains(focused)) focused.blur();
     window.getSelection()?.removeAllRanges();
   }, [tool, note.id]);
+
+  useEffect(() => {
+    if (tool !== 'ink' && tool !== 'eraser') return;
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const stopStylusScroll = (event: TouchEvent) => {
+      if (Array.from(event.changedTouches).some((touch) => (touch as Touch & { touchType?: string }).touchType === 'stylus')) event.preventDefault();
+    };
+    viewport.addEventListener('touchstart', stopStylusScroll, { passive: false });
+    viewport.addEventListener('touchmove', stopStylusScroll, { passive: false });
+    return () => {
+      viewport.removeEventListener('touchstart', stopStylusScroll);
+      viewport.removeEventListener('touchmove', stopStylusScroll);
+    };
+  }, [tool]);
 
   useEffect(() => {
     const update = () => {
@@ -210,7 +226,7 @@ export function CanvasWorkspace() {
   return <main className={`canvas-shell document-mode tool-${tool}`}>
     <CanvasToolbar addBlock={addBlock} onImage={() => imageRef.current?.click()} />
     <input ref={imageRef} hidden type="file" accept="image/*" capture="environment" onChange={(event) => addImage(event.target.files?.[0])} />
-    <div className="document-viewport" onPointerDownCapture={(event) => {
+    <div ref={viewportRef} className="document-viewport" onPointerDownCapture={(event) => {
       if (!(event.target instanceof Element) || event.target.closest('.ink-selection-box')) return;
       if (event.shiftKey && event.button === 0 && event.target.closest('.document-page') && !event.target.closest('button, input, textarea, select, .resize-handle')) {
         marqueeRef.current = { pointerId: event.pointerId, start: toPage(event.clientX, event.clientY), dragging: false };

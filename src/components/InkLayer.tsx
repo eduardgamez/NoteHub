@@ -38,6 +38,7 @@ export function InkLayer({ noteId, mode, toWorld, layout, moving }: InkLayerProp
   function pointerDown(event: React.PointerEvent<SVGSVGElement>) {
     if (event.shiftKey) return;
     if (mode !== 'ink' && mode !== 'eraser') return;
+    if (event.pointerType === 'touch') return;
     if (activePointer.current !== null) return;
     event.preventDefault();
     activePointer.current = event.pointerId;
