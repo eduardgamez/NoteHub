@@ -10,14 +10,27 @@ vi.mock('../sync/syncEngine', () => ({ syncEngine: { publish: vi.fn(), subscribe
 import { useWorkspace } from './useWorkspace';
 
 describe('workspace hydration across devices', () => {
-  it('removes unchanged gym examples but preserves user routines and sessions', async () => {
+  it('starts with a blank chat while preserving history for explicit selection', async () => {
+    const local = structuredClone(seedWorkspace);
+    local.chatSessions = { old: { id: 'old', scope: 'global', title: 'Previous chat', createdAt: 1, updatedAt: 2 } };
+    local.chatThreads = { old: [{ id: 'message', role: 'user', content: 'Previous message', createdAt: 1 }] };
+    local.activeChatIds = { global: 'old' };
+    vi.mocked(loadWorkspace).mockResolvedValueOnce(local);
+    vi.spyOn(cloudSync, 'loadSnapshot').mockResolvedValueOnce(null);
+    await useWorkspace.getState().hydrate();
+    expect(useWorkspace.getState().activeChatIds).toEqual({});
+    expect(useWorkspace.getState().chatThreads.old).toEqual(local.chatThreads.old);
+    useWorkspace.getState().selectChatSession('global', 'old');
+    expect(useWorkspace.getState().activeChatIds.global).toBe('old');
+  });
+  it('removes gym examples including edited versions but preserves user routines and sessions', async () => {
     const demoRoutine = { id: 'upper-a', name: 'Upper A', exercises: [{ exerciseId: 'incline-db', targetSets: 3, repRange: '6–10' }, { exerciseId: 'chest-row', targetSets: 3, repRange: '8–12' }, { exerciseId: 'lateral-raise', targetSets: 4, repRange: '10–15' }] };
     const demoWorkout = { id: 'workout-0', routineId: 'upper-a', title: 'Upper A', startedAt: '2026-01-01T18:00:00Z', endedAt: '2026-01-01T18:00:00Z', exercises: [
       { exerciseId: 'incline-db', sets: [{ id: 'incline-0-1', reps: 8, weight: 24, rir: 2, completed: true }, { id: 'incline-0-2', reps: 9, weight: 22, rir: 1, completed: true }] },
       { exerciseId: 'chest-row', sets: [{ id: 'row-0', reps: 10, weight: 45, rir: 2, completed: true }] },
       { exerciseId: 'calf-raise', sets: [{ id: 'calf-0', reps: 12, weight: 50, rir: 2, completed: true }] },
     ] };
-    const local = { ...structuredClone(seedWorkspace), routines: [demoRoutine, { ...demoRoutine, id: 'mine', name: 'Mi rutina' }], workouts: [demoWorkout, { ...demoWorkout, id: 'my-session', title: 'Mi sesión' }] };
+    const local = { ...structuredClone(seedWorkspace), routines: [demoRoutine, { ...demoRoutine, id: 'mine', name: 'Mi rutina' }], workouts: [demoWorkout, ...Array.from({ length: 7 }, (_, index) => ({ ...demoWorkout, id: `workout-${index + 1}`, title: 'Ejemplo editado', endedAt: '2026-01-01T19:00:00Z' })), { ...demoWorkout, id: 'my-session', title: 'Mi sesión' }] };
     vi.mocked(loadWorkspace).mockResolvedValueOnce(local);
     vi.spyOn(cloudSync, 'loadSnapshot').mockResolvedValueOnce(null);
     await useWorkspace.getState().hydrate();
@@ -30,7 +43,7 @@ describe('workspace hydration across devices', () => {
     useWorkspace.getState().applyRemote({ kind: 'routine.upsert', routine: { ...demoRoutine, name: 'Mi rutina editada' }, opId: 'edited-demo-routine', source: 'remote', timestamp: 2 });
     expect(useWorkspace.getState().routines.map((item) => item.id)).toEqual(['mine']);
     useWorkspace.getState().applyRemote({ kind: 'workout.upsert', workout: { ...demoWorkout, endedAt: '2026-01-01T19:00:00Z' }, opId: 'edited-demo-workout', source: 'remote', timestamp: 2 });
-    expect(useWorkspace.getState().workouts.at(-1)?.endedAt).toBe('2026-01-01T19:00:00Z');
+    expect(useWorkspace.getState().workouts.map((item) => item.id)).toEqual(['my-session']);
   });
 
   it('does not load a previous account workspace into a different account', async () => {

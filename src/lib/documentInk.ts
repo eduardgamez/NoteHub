@@ -29,8 +29,8 @@ export function strokeIntersectsRect(stroke: InkStroke, rect: DocumentRect): boo
 
 export const DOCUMENT_WIDTH = 850;
 
-export function fitDocumentScale(availableWidth: number, maxColumns: number): number {
-  return maxColumns >= 3 || availableWidth <= 0 ? 1 : Math.min(1, availableWidth / DOCUMENT_WIDTH);
+export function fitDocumentScale(availableWidth: number): number {
+  return availableWidth <= 0 ? 1 : Math.min(1, availableWidth / DOCUMENT_WIDTH);
 }
 
 export function readDocumentScale(page: HTMLElement): number {

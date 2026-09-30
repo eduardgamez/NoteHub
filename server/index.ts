@@ -18,7 +18,7 @@ interface ContextItem { id: string; type: string; content: string }
 interface CompleteBody { stream?: boolean; provider: ProviderId; providerKey?: string; messages: Message[]; context: ContextItem[]; global?: boolean; permissions?: { web?: boolean }; purpose?: 'transcribe'; model?: string; thinking?: 'standard' | 'extended'; effort?: string }
 
 const app = express();
-const port = Number(process.env.NOTEHUB_API_PORT ?? 8787);
+const port = Number(process.env.PORT ?? process.env.NOTEHUB_API_PORT ?? 8787);
 const requireAuth = process.env.NOTEHUB_REQUIRE_AUTH === 'true';
 const supabaseUrl = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL;
 const supabasePublishableKey = process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? process.env.SUPABASE_ANON_KEY ?? process.env.VITE_SUPABASE_ANON_KEY;

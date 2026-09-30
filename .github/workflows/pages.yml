@@ -27,6 +27,7 @@ jobs:
       - name: Build web app
         env:
           NOTEHUB_BASE_PATH: /NoteHub/
+          VITE_API_ORIGIN: ${{ vars.NOTEHUB_API_ORIGIN }}
           VITE_SUPABASE_URL: https://iqnpmbnckuqbqvxkkqcu.supabase.co
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
         run: |

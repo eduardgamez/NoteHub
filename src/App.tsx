@@ -1,3 +1,4 @@
+import { watchChatLifecycle } from './lib/chatLifecycle';
 import { NativeRuntime } from './native/NativeRuntime';
 import { useEffect } from 'react';
 import { Sparkles } from 'lucide-react';
@@ -28,6 +29,7 @@ export function App() {
   const activeNoteId = useWorkspace((state) => state.activeNoteId);
 
   useEffect(() => { void hydrate(); }, [hydrate]);
+  useEffect(() => watchChatLifecycle(() => useWorkspace.setState({ activeChatIds: {}, aiTextSelection: null })), []);
   useEffect(() => hydrated ? syncEngine.subscribe(applyRemote, () => workspaceDataFrom(useWorkspace.getState()), () => useWorkspace.getState().finishSyncRecovery()) : undefined, [applyRemote, hydrated]);
 
   useEffect(() => {

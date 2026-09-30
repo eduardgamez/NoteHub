@@ -1,3 +1,4 @@
+import { watchChatScroll } from '../lib/chatScroll';
 import { deletionPreview } from '../ai/deletionProposal';
 import { useChatRuns, startChatRun, chatProgress, setChatRunError, finishChatRun, type ChatRunError } from '../ai/chatRuns';
 import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -73,7 +74,12 @@ export function AIChat({ global = false, compact = false, home = false }: AIChat
   const project = state.projects.find((item) => item.id === state.activeProjectId) ?? state.projects.find((item) => item.id === note?.projectId);
   const scope = global ? 'global' : `project:${project?.id ?? 'unknown'}`;
   const sessions = Object.values(state.chatSessions).filter((item) => item.scope === scope).sort((a, b) => b.updatedAt - a.updatedAt);
-  const threadId = state.chatSessions[state.activeChatIds[scope]]?.scope === scope ? state.activeChatIds[scope] : sessions[0]?.id ?? '';
+  const threadId = state.chatSessions[state.activeChatIds[scope]]?.scope === scope ? state.activeChatIds[scope] : '';
+  useEffect(() => {
+    setHistoryOpen(false);
+    setModelMenuOpen(false);
+    if (inputRef.current) { inputRef.current.value = ''; inputRef.current.style.height = ''; }
+  }, [scope, threadId]);
   const draftKey = `${scope}:${threadId}`;
   const draftAttachments = attachments[draftKey] ?? [];
   const session = state.chatSessions[threadId];
@@ -198,8 +204,8 @@ export function AIChat({ global = false, compact = false, home = false }: AIChat
 
   useLayoutEffect(() => {
     const thread = threadRef.current;
-    if (thread) thread.scrollTop = thread.scrollHeight;
-  }, [threadId, messages.length, thinking, run?.progress, error, pending.length]);
+    if (thread) return watchChatScroll(thread);
+  }, [scope, threadId]);
 
   const data = useMemo<WorkspaceStateData>(() => ({
     version: state.version, projects: state.projects, folders: state.folders, notes: state.notes, activeNoteId: state.activeNoteId,
@@ -386,14 +392,14 @@ export function AIChat({ global = false, compact = false, home = false }: AIChat
 
   const headerModel = providerId === 'codex' ? `${currentModelLabel}${codexEffortText ? ` · ${codexEffortText}` : ''}` : formatModelLabel(providerName, providerId === 'gemini' ? selectedModel || session?.model || modelName : session?.model || modelName);
   const canChooseModel = providerId === 'gemini' || providerId === 'codex';
-  const titleContent = <><strong>{home ? 'AI · Quick Access' : 'AI'}</strong><span>· {headerModel || providerName}</span>{canChooseModel && <ChevronDown size={12} aria-hidden="true" />}</>;
+  const titleContent = <><strong>{home ? 'AI · Quick Access' : 'AI'}</strong><span>· {headerModel || providerName}</span>{canChooseModel && !home && <ChevronDown size={12} aria-hidden="true" />}</>;
   const selectedCount = !global && note ? note.blocks.filter((block) => state.selectedIds.includes(block.id)).length : 0;
   const textSelection = !global && state.aiTextSelection?.noteId === note?.id ? state.aiTextSelection : null;
   const contextLabel = textSelection ? `Texto seleccionado · ${textSelection.blockIds.length} ${textSelection.blockIds.length === 1 ? 'bloque' : 'bloques'}` : selectedCount ? `${note.title} · ${selectedCount} selected block${selectedCount === 1 ? '' : 's'}` : state.activeView === 'note' ? note?.title ?? 'Document' : project?.title ?? 'Project';
 
   return <div className={`ai-chat ${compact ? 'compact' : ''} ${global && !compact ? 'global-chat' : ''}`} onDragOver={(event) => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }} onDrop={(event) => { if (event.dataTransfer.files.length) { event.preventDefault(); void attachFiles(Array.from(event.dataTransfer.files)); } }}>
     {compact && <div className={`ai-chat-toolbar ${home ? 'home-chat-toolbar' : ''}`} ref={toolbarRef}>
-      {canChooseModel ? <button type="button" className="ai-chat-title ai-chat-model-trigger" title={headerModel} aria-label="Choose AI model" aria-expanded={modelMenuOpen} onClick={() => { setModelMenuOpen(!modelMenuOpen); setHistoryOpen(false); }}>{titleContent}</button> : <div className="ai-chat-title">{titleContent}</div>}
+      {canChooseModel && !home ? <button type="button" className="ai-chat-title ai-chat-model-trigger" title={headerModel} aria-label="Choose AI model" aria-expanded={modelMenuOpen} onClick={() => { setModelMenuOpen(!modelMenuOpen); setHistoryOpen(false); }}>{titleContent}</button> : <div className="ai-chat-title">{titleContent}</div>}
         <div className="ai-chat-toolbar-actions">
         <button type="button" title="Chat history" aria-label="Chat history" aria-expanded={historyOpen} onClick={() => { setHistoryOpen(!historyOpen); setModelMenuOpen(false); }}><Clock3 size={17} /></button>
         <button type="button" title="New chat" aria-label="New chat" onClick={() => { if (!session || messages.length > 0) state.createChatSession(scope); state.setAiTextSelection(null); setHistoryOpen(false); setModelMenuOpen(false); setError(null); if (inputRef.current) { inputRef.current.value = ''; resizeComposer(); } inputRef.current?.focus(); }}><Plus size={18} /></button>

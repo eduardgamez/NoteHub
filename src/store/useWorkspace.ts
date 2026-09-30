@@ -493,9 +493,7 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
       delete chatThreads[sessionId];
       const activeChatIds = { ...state.activeChatIds };
       if (activeChatIds[session.scope] === sessionId) {
-        const next = Object.values(chatSessions).filter((item) => item.scope === session.scope).sort((a, b) => b.updatedAt - a.updatedAt)[0];
-        if (next) activeChatIds[session.scope] = next.id;
-        else delete activeChatIds[session.scope];
+        delete activeChatIds[session.scope];
       }
       return { chatSessions, chatThreads, activeChatIds, pendingProposals: state.pendingProposals.filter((proposal) => proposal.threadId !== sessionId) };
     });
@@ -640,7 +638,7 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
       const remoteData = remote ? migrate(remote) : null;
       const keepLocal = Boolean(localData && !isStarterWorkspace(localData));
       const data = keepLocal ? localData! : remoteData ?? localData ?? { ...seedWorkspace, notes: Object.fromEntries(Object.entries(seedWorkspace.notes).map(([id, note]) => [id, ensureTitleBlock(note)])) };
-      set({ ...data, syncUserId: userId ?? data.syncUserId, activeProjectId: data.notes[data.activeNoteId]?.projectId ?? data.projects[0]?.id ?? '', hydrated: true });
+      set({ ...data, activeChatIds: {}, syncUserId: userId ?? data.syncUserId, activeProjectId: data.notes[data.activeNoteId]?.projectId ?? data.projects[0]?.id ?? '', hydrated: true });
       const source = stored ?? remote;
       const hadDemoItems = Boolean(source?.calendarEvents?.some((event) => demoEventIds.has(event.id))
         || source?.tasks?.some((task) => demoTaskIds.has(task.id))

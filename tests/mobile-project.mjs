@@ -71,8 +71,8 @@ try {
   await page.setViewportSize({ width: 375, height: 900 });
   await page.waitForTimeout(100);
   const scrolling = await page.locator('.document-viewport').evaluate((element) => element.scrollWidth > element.clientWidth + 1);
-  assert.equal(scrolling, true);
-  assert.equal(Number(await page.locator('.canvas-shell').getAttribute('data-document-scale')), 1);
+  assert.equal(scrolling, false);
+  assert.ok(Number(await page.locator('.canvas-shell').getAttribute('data-document-scale')) < 1);
   const threeColumns = await geometry();
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.waitForTimeout(100);
@@ -103,7 +103,7 @@ try {
   await page.mouse.up();
   const tableWidth = await page.evaluate(async () => (await import('/src/store/useWorkspace.ts')).useWorkspace.getState().notes.sensitivity.blocks.find((block) => block.id === 'scaled-table').tableColumnWidths[0]);
   assert.equal(tableWidth, 120);
-  console.log('Mobile project checks passed: bottom controls, exclusive panels, closing explorer, fitted ink coordinates, stable layouts, 2→3→2 column scrolling and table resizing.');
+  console.log('Mobile project checks passed: bottom controls, exclusive panels, closing explorer, fitted ink coordinates, stable layouts, fitted 2→3→2 column layouts and table resizing.');
 } finally {
   await browser?.close(); server.kill('SIGTERM');
 }

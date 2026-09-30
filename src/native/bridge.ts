@@ -24,8 +24,10 @@ export function nativeItems(tasks: Task[], events: CalendarEvent[]): NativeItem[
   ].filter((item) => Number.isFinite(item.due));
 }
 export function apiUrl(path: string): string {
-  if (!isNativeIOS()) return path;
   const origin = localStorage.getItem('notehub-api-origin') ?? import.meta.env.VITE_API_ORIGIN;
-  if (!origin) throw new Error('Configura la dirección del servidor de IA en Ajustes de la app.');
+  if (!origin) {
+    if (isNativeIOS() || window.location.hostname.endsWith('.github.io')) throw new Error('Configura el Servidor de IA en Ajustes con una dirección HTTPS. La web publicada necesita un servidor de IA accesible.');
+    return path;
+  }
   return `${origin.replace(/\/$/, '')}${path}`;
 }

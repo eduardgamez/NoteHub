@@ -1,0 +1,31 @@
+import { afterEach, expect, it, vi } from 'vitest';
+import { watchChatLifecycle } from './chatLifecycle';
+let stop: (() => void) | undefined;
+afterEach(() => { stop?.(); vi.restoreAllMocks(); vi.useRealTimers(); });
+it('retains the chat on short absences and resets once after more than three minutes', () => {
+  vi.useFakeTimers();
+  let hidden = false;
+  vi.spyOn(document, 'hidden', 'get').mockImplementation(() => hidden);
+  const reset = vi.fn();
+  stop = watchChatLifecycle(reset);
+  const visibility = (value: boolean) => { hidden = value; document.dispatchEvent(new Event('visibilitychange')); };
+  visibility(true);
+  vi.advanceTimersByTime(180000);
+  visibility(false);
+  expect(reset).not.toHaveBeenCalled();
+  visibility(true);
+  vi.advanceTimersByTime(180001);
+  visibility(false);
+  window.dispatchEvent(new Event('focus'));
+  expect(reset).toHaveBeenCalledTimes(1);
+});
+it('resets when returning through the page cache', () => {
+  vi.useFakeTimers();
+  vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
+  const reset = vi.fn();
+  stop = watchChatLifecycle(reset);
+  window.dispatchEvent(new Event('pagehide'));
+  vi.advanceTimersByTime(180001);
+  window.dispatchEvent(new Event('pageshow'));
+  expect(reset).toHaveBeenCalledTimes(1);
+});

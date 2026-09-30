@@ -5,7 +5,7 @@ import { saveInkTranscript } from './inkTranscript';
 
 describe('workspace retrieval', () => {
   it('retrieves relevant structured workout data for fitness questions', () => {
-    const context = retrieveWorkspaceContext('Have I progressed in incline press?', seedWorkspace);
+    const context = retrieveWorkspaceContext('Have I progressed in incline press?', { ...seedWorkspace, workouts: [{ id: 'test-session', title: 'My workout', startedAt: '2026-01-01T18:00:00Z', exercises: [{ exerciseId: 'incline-db', sets: [{ id: 'test-set', weight: 24, reps: 8, completed: true }] }] }] });
     expect(context.some((item) => item.type === 'workout' && item.content.includes('Incline dumbbell press'))).toBe(true);
   });
 

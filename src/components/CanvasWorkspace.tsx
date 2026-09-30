@@ -35,8 +35,7 @@ export function CanvasWorkspace() {
   const [crossTextPosition, setCrossTextPosition] = useState<{ left: number; top: number } | null>(null);
   const note = useWorkspace((state) => state.notes[state.activeNoteId]);
   const rows = blockRows(note.blocks);
-  const maxColumns = Math.max(1, ...rows.map((row) => row.columns.length));
-  const documentZoom = fitDocumentScale(availableWidth, maxColumns);
+  const documentZoom = fitDocumentScale(availableWidth);
   const selectedIds = useWorkspace((state) => state.selectedIds);
   const activeBlockId = useWorkspace((state) => state.activeBlockId);
   const setActiveBlockId = useWorkspace((state) => state.setActiveBlockId);
@@ -223,7 +222,7 @@ export function CanvasWorkspace() {
     return { x, y, width: right - x, height: bottom - y };
   }, { ...selectedStrokes[0].bounds }) : null;
 
-  return <main className={`canvas-shell document-mode tool-${tool} ${maxColumns >= 3 ? 'document-scrollable' : 'document-fitted'}`} data-document-scale={documentZoom}>
+  return <main className={`canvas-shell document-mode tool-${tool} document-fitted`} data-document-scale={documentZoom}>
     <CanvasToolbar addBlock={addBlock} onImage={() => imageRef.current?.click()} />
     <input ref={imageRef} hidden type="file" accept="image/*" capture="environment" onChange={(event) => addImage(event.target.files?.[0])} />
     <div ref={viewportRef} className="document-viewport" onPointerDownCapture={(event) => {
