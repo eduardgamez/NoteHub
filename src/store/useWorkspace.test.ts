@@ -78,6 +78,16 @@ describe('personal profile in chats', () => {
     expect(store.readProfileForChat(id)).toContain('Respuestas detalladas');
   });
 
+  it('replaces existing AI memory and does not timestamp redundant writes', () => {
+    const store = useWorkspace.getState();
+    store.setProfileField('classes', 'Texto del usuario\n/Universidad a las 9./');
+    store.applyProfileUpdates([{ field: 'classes', value: 'Universidad a las 9, excepto lunes.', replace: [{ field: 'classes', value: 'Universidad a las 9.' }] }]);
+    expect(useWorkspace.getState().personalProfile.answers.classes).toBe('Texto del usuario\n/Universidad a las 9, excepto lunes./');
+    const previous = useWorkspace.getState().personalProfile;
+    store.applyProfileUpdates([{ field: 'notes', value: 'Universidad a las 9, excepto lunes.' }]);
+    expect(useWorkspace.getState().personalProfile).toBe(previous);
+  });
+
   it('adds an explicit AI fact and lets the user remove it', () => {
     const store = useWorkspace.getState();
     store.setProfileField('classes', 'Martes a las 10');

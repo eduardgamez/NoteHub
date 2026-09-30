@@ -7,7 +7,7 @@ import { makeBlock } from '../lib/blockFactory';
 import { insertInLayout, moveInLayout } from '../lib/blockLayout';
 import { ensureTitleBlock, titleFromBlock } from '../lib/noteTitle';
 import { isStarterWorkspace } from '../lib/starterWorkspace';
-import { appendAIProfileText, migrateAIProfileText, profileSummary, validProfileUpdates } from '../ai/personalProfile';
+import { updateAIProfile, migrateAIProfileText, profileSummary, validProfileUpdates } from '../ai/personalProfile';
 import type {
   AITextSelection, AppView, CalendarEvent, CanvasBlock, ChatMessageRecord, ChatSession, Exercise, Folder, FolderContext, InkStroke,
   Note, PendingProposal, ProfileField, ProfileUpdate, Project, Task, ToolMode, Workout, WorkspaceStateData,
@@ -515,21 +515,13 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
   applyProfileUpdates(updates) {
     const accepted = validProfileUpdates(updates);
     if (!accepted.length) return;
+    const previous = get().personalProfile;
     set((state) => {
-      const profile = structuredClone(state.personalProfile);
-      let changed = false;
-      for (const { field, value } of accepted) {
-        if (field === 'notes') {
-          const next = appendAIProfileText(profile.notes, value);
-          if (next !== profile.notes) { profile.notes = next; changed = true; }
-        } else {
-          const current = profile.answers[field] ?? '';
-          const next = appendAIProfileText(current, value);
-          if (next !== current) { profile.answers[field] = next; changed = true; }
-        }
-      }
+      const profile = updateAIProfile(state.personalProfile, accepted);
+      const changed = JSON.stringify(profile) !== JSON.stringify(state.personalProfile);
       return changed ? { personalProfile: { ...profile, updatedAt: Math.max(Date.now(), state.personalProfile.updatedAt + 1) } } : state;
     });
+    if (get().personalProfile === previous) return;
     persist(get()); syncEngine.publish({ kind: 'profile.upsert', profile: get().personalProfile });
   },
   appendChatMessage(threadId, message) {

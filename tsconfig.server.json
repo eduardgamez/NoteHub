@@ -10,5 +10,5 @@
     "esModuleInterop": true,
     "types": ["node"]
   },
-  "include": ["server", "src/ai/responseText.ts"]
+  "include": ["server", "src/ai/responseText.ts", "src/ai/personalProfile.ts", "src/types.ts"]
 }

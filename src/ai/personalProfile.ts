@@ -43,6 +43,25 @@ export function validProfileUpdates(value: unknown): ProfileUpdate[] {
   if (!Array.isArray(value)) return [];
   const fields = new Set<string>([...profileQuestions.map((item) => item.field), 'notes']);
   return value.filter((item): item is ProfileUpdate =>
-    typeof item === 'object' && item !== null && fields.has(item.field) && typeof item.value === 'string' && item.value.trim().length > 0 && item.value.length <= 800,
-  ).slice(0, 6).map((item) => ({ field: item.field, value: item.value.trim() }));
+    typeof item === 'object' && item !== null && fields.has(item.field) && typeof item.value === 'string' && item.value.trim().length > 0 && item.value.length <= 2400 &&
+    (item.replace === undefined || (Array.isArray(item.replace) && item.replace.length <= 12 && item.replace.every((target: { field?: unknown; value?: unknown }) => target && fields.has(String(target.field)) && typeof target.value === 'string' && target.value.trim().length > 0 && target.value.length <= 2400))),
+  ).slice(0, 3).map((item) => ({ field: item.field, value: item.value.trim(), ...(item.replace ? { replace: item.replace.map((target) => ({ field: target.field, value: target.value.trim() })) } : {}) }));
+}
+
+/** Exact replacements can touch AI-marked lines only, including moves between sections. */
+export function updateAIProfile(profile: PersonalProfile, updates: ProfileUpdate[]): PersonalProfile {
+  const next = structuredClone(profile);
+  const read = (field: ProfileUpdate['field']) => field === 'notes' ? next.notes : next.answers[field] ?? '';
+  const write = (field: ProfileUpdate['field'], value: string) => { if (field === 'notes') next.notes = value; else next.answers[field] = value; };
+  const normalize = (value: string) => value.trim().replace(/^\/(.*)\/$/, '$1').toLocaleLowerCase().replace(/[.!?]+$/, '');
+  for (const update of validProfileUpdates(updates)) {
+    const targets = update.replace ?? [];
+    // Reject the whole edit if a source was edited/deleted, or was written by the user.
+    if (targets.some((target) => !read(target.field).split('\n').some((line) => line.trim() === `/${target.value}/`))) continue;
+    for (const target of targets) write(target.field, read(target.field).split('\n').filter((line) => line.trim() !== `/${target.value}/`).join('\n'));
+    const known = [...profileQuestions.map(({ field }) => read(field)), read('notes')].flatMap((text) => text.split('\n')).map(normalize);
+    const additions = update.value.split('\n').filter((line) => !known.includes(normalize(line))).join('\n');
+    if (additions) write(update.field, appendAIProfileText(read(update.field), additions));
+  }
+  return next;
 }

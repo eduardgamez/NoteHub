@@ -226,7 +226,7 @@ export function AIChat({ global = false, compact = false, home = false }: AIChat
       const context: AIContextItem[] = [
         ...attachmentContext(conversation),
         { id: 'personal-profile-summary', type: 'personal-profile-summary', content: personalSummary || '(empty profile)' },
-        ...(profileChanged && !greetingOnly ? [{ id: 'personal-profile-updated', type: 'personal-profile', content: profileDetails(profileAtSend) }] : []),
+        ...(!greetingOnly ? [{ id: 'personal-profile', type: 'personal-profile', content: profileDetails(profileAtSend) }] : []),
         ...(!greetingOnly ? [workspaceFileMap(data, access), ...(!global && note ? [{ id: note.id, type: 'current-file', content: `Open file: ${note.title}; project: ${project?.title ?? note.projectId}` }] : [])] : []),
       ];
       const page = document.querySelector<HTMLElement>('.document-page');
@@ -250,9 +250,7 @@ export function AIChat({ global = false, compact = false, home = false }: AIChat
       let response: AIResponse | undefined;
       for (let round = 0; round < 6; round++) {
         response = await aiProvider.complete(history, context, { global, web: webEnabled, model: providerId === 'gemini' ? selectedModel || undefined : providerId === 'codex' ? selectedCodexModel || undefined : undefined, thinking: providerId === 'gemini' ? extendedReasoning ? 'extended' : 'standard' : undefined, effort: providerId === 'codex' ? codexEffort || undefined : undefined });
-        validProfileUpdates(response.profileUpdates).forEach((update) => {
-          if (!profileUpdates.some((item) => item.field === update.field && item.value === update.value)) profileUpdates.push(update);
-        });
+        profileUpdates.splice(0, profileUpdates.length, ...validProfileUpdates(response.profileUpdates));
         response.sources?.forEach((source) => { if (/^https?:\/\//.test(source.url)) sourceLinks.set(source.url, source); });
         const searchRequested = providerId === 'gemini' && !greetingOnly && !webEnabled && response.searchWeb === true;
         if (searchRequested) webEnabled = true;
@@ -307,7 +305,7 @@ export function AIChat({ global = false, compact = false, home = false }: AIChat
         if (profileChanged && !greetingOnly && useWorkspace.getState().personalProfile.updatedAt === profileAtSend.updatedAt) state.readProfileForChat(sendingThreadId);
         if (response.model) state.setChatSessionModel(sendingThreadId, providerId === 'codex' ? codexModels.find((item) => item.id === response.model)?.label ?? response.model : formatModelLabel(providerName, response.model));
         state.appendChatMessage(sendingThreadId, newChatMessage('assistant', response.text, [...sourceLinks.values()]));
-        if (profileUpdates.length) state.applyProfileUpdates(profileUpdates);
+        if (profileUpdates.length && useWorkspace.getState().personalProfile.updatedAt === profileAtSend.updatedAt) state.applyProfileUpdates(profileUpdates);
         if (response.proposals?.length) state.enqueueProposals(response.proposals.map((proposal) => {
           const block = proposal.kind === 'file.block.delete' ? data.notes[proposal.payload.noteId as string]?.blocks.find((item) => item.id === proposal.payload.blockId) : undefined;
           return { ...proposal, ...(block ? { before: block.type === 'image' ? `[Image] ${block.caption ?? ''}` : block.content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160) || `[${block.type} block]`, after: 'Block deleted' } : {}), id: crypto.randomUUID(), threadId: sendingThreadId, status: 'pending' as const, createdAt: Date.now() };
