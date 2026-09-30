@@ -1,0 +1,24 @@
+[Unit]
+Description=NoteHub AI broker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=notehub
+Group=notehub
+WorkingDirectory=/var/lib/notehub
+EnvironmentFile=/etc/notehub.env
+ExecStart=/usr/local/bin/node /opt/notehub/server.mjs
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/notehub
+MemoryMax=700M
+TasksMax=128
+
+[Install]
+WantedBy=multi-user.target

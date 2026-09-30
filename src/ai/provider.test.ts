@@ -1,10 +1,11 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AIConfigurationError, ServerAIProvider } from './provider';
 
 vi.mock('./keyVault', () => ({ getProviderKey: vi.fn().mockResolvedValue('saved-browser-key') }));
 
 describe('ServerAIProvider', () => {
-  afterEach(() => vi.restoreAllMocks());
+  beforeEach(() => vi.stubEnv('VITE_API_ORIGIN', ''));
+  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
   it('sends context through the secure application endpoint', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ text: 'Answer', proposals: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } })));

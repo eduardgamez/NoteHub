@@ -18,6 +18,8 @@ interface ContextItem { id: string; type: string; content: string }
 interface CompleteBody { stream?: boolean; provider: ProviderId; providerKey?: string; messages: Message[]; context: ContextItem[]; global?: boolean; permissions?: { web?: boolean }; purpose?: 'transcribe'; model?: string; thinking?: 'standard' | 'extended'; effort?: string }
 
 const app = express();
+let activeCodexRequests = 0;
+const codexRequestLimit = Math.max(1, Number(process.env.NOTEHUB_CODEX_MAX_CONCURRENT) || 4);
 const port = Number(process.env.PORT ?? process.env.NOTEHUB_API_PORT ?? 8787);
 const requireAuth = process.env.NOTEHUB_REQUIRE_AUTH === 'true';
 const supabaseUrl = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL;
@@ -117,6 +119,11 @@ app.post('/api/ai/complete', aiAuth, async (request, response) => {
     response.status(503).json({ error: `${body.provider} is not configured. Add its API key in NoteHub Settings.` }); return;
   }
 
+  const reservesCodex = body.provider === 'codex';
+  if (reservesCodex && activeCodexRequests >= codexRequestLimit) {
+    response.status(429).json({ error: 'El servidor está atendiendo otra solicitud. Vuelve a intentarlo en unos segundos.' }); return;
+  }
+  if (reservesCodex) activeCodexRequests++;
   try {
     if (body.provider === 'codex') {
       const streaming = body.stream === true;
@@ -148,6 +155,8 @@ app.post('/api/ai/complete', aiAuth, async (request, response) => {
     const message = error instanceof Error ? error.message : 'Unknown provider error';
     console.error(`[ai:${body.provider}]`, message);
     response.status(502).json({ error: `The ${body.provider} request failed. ${message}` });
+  } finally {
+    if (reservesCodex) activeCodexRequests--;
   }
 });
 
@@ -242,4 +251,4 @@ async function completeGemini(body: CompleteBody, apiKey: string) {
   return { text: value.text ?? '', model, sources };
 }
 
-app.listen(port, () => console.log(`NoteHub API listening on http://localhost:${port}`));
+app.listen(port, process.env.NOTEHUB_API_HOST ?? '0.0.0.0', () => console.log(`NoteHub API listening on port ${port}`));

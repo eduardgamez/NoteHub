@@ -4,6 +4,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
+import { chatgptPlanConfigured, chatgptPlanAccessToken, chatgptPlanArguments } from './chatgptPlan';
 
 function codexBin() {
   if (process.env.NOTEHUB_CODEX_BIN) return process.env.NOTEHUB_CODEX_BIN;
@@ -24,6 +25,7 @@ function codexBin() {
 }
 
 export function codexAvailable() {
+  if (chatgptPlanConfigured()) return codexInstalled();
   const result = spawnSync(codexBin(), ['login', 'status'], { encoding: 'utf8', timeout: 3000 });
   return result.status === 0 && /Logged in using ChatGPT/i.test(`${result.stdout}${result.stderr}`);
 }
@@ -35,7 +37,7 @@ export function codexInstalled() {
 type RpcMessage = { id?: number; method?: string; result?: any; error?: { message?: string }; params?: any };
 
 class CodexConnection {
-  private child = spawn(codexBin(), ['app-server', '--stdio'], { stdio: ['pipe', 'pipe', 'pipe'] });
+  private child;
   private nextId = 1;
   private requests = new Map<number, { resolve: (value: any) => void; reject: (error: Error) => void }>();
   private completed?: (value: string) => void;
@@ -45,7 +47,10 @@ class CodexConnection {
   onNotification?: (message: RpcMessage) => void;
   onFailure?: (error: Error) => void;
 
-  constructor() {
+  constructor(accessToken?: string) {
+    this.child = spawn(codexBin(), accessToken ? chatgptPlanArguments() : ['app-server', '--stdio'], {
+      stdio: ['pipe', 'pipe', 'pipe'], env: accessToken ? { ...process.env, ACCESS_TOKEN: accessToken } : process.env,
+    });
     createInterface({ input: this.child.stdout }).on('line', (line) => {
       let message: RpcMessage;
       try { message = JSON.parse(line); } catch { return; }
@@ -148,7 +153,7 @@ export async function beginCodexLogin(): Promise<LoginState> {
 }
 
 async function connect() {
-  const connection = new CodexConnection();
+  const connection = new CodexConnection(chatgptPlanConfigured() ? await chatgptPlanAccessToken() : undefined);
   await connection.request('initialize', { clientInfo: { name: 'notehub', title: 'NoteHub', version: '0.1.0' } });
   connection.notify('initialized');
   return connection;
