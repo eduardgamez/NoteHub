@@ -61,7 +61,7 @@ class CodexConnection {
       }
       if (message.method === 'item/completed' && message.params?.item?.type === 'agentMessage') {
         const item = message.params.item;
-        if (item.phase === 'final_answer' || !this.finalText) this.finalText = item.text || '';
+        if (item.phase !== 'commentary' && (item.phase === 'final_answer' || !this.finalText)) this.finalText = item.text || '';
       }
       if (message.method === 'turn/completed') {
         const turn = message.params?.turn;
@@ -165,6 +165,7 @@ export async function listCodexModels() {
 export async function completeWithCodex(input: {
   prompt: string;
   images: string[];
+  onProgress?: (text: string) => void;
   model?: string;
   effort?: string;
 }) {
@@ -181,6 +182,10 @@ export async function completeWithCodex(input: {
       imageItems.push({ type: 'localImage', path });
     }
     connection = await connect();
+    connection.onNotification = (message) => {
+      const item = message.params?.item;
+      if (message.method === 'item/completed' && item?.type === 'agentMessage' && item.phase === 'commentary' && typeof item.text === 'string') input.onProgress?.(item.text);
+    };
     const models = await connection.request('model/list', { limit: 30, includeHidden: false });
     const choices = (models?.data ?? []).filter((item: any) => typeof item.model === 'string');
     const selected = choices.find((item: any) => item.model === input.model) ?? choices.find((item: any) => item.model === 'gpt-6-sol') ?? choices.find((item: any) => item.isDefault) ?? choices[0];

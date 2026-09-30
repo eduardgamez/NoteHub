@@ -1,3 +1,4 @@
+import { useChatRuns, startChatRun, chatProgress, setChatRunError, finishChatRun, type ChatRunError } from '../ai/chatRuns';
 import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUp, CalendarDays, Check, ChevronDown, Clock3, Dumbbell, FileText, Lightbulb, Paperclip, Pencil, Plus, Settings, Sparkles, Trash2, X } from 'lucide-react';
 import { AIConfigurationError, AIQuotaError, AIUnavailableError, aiProvider, getActiveProvider, getCodexModels, getGeminiModels, getProviderStatus } from '../ai/provider';
@@ -54,8 +55,7 @@ export function AIChat({ global = false, compact = false, home = false }: AIChat
   const toolbarRef = useRef<HTMLDivElement>(null);
   const modelMenuRef = useRef<HTMLDivElement>(null);
   const contextHelpRef = useRef<HTMLButtonElement>(null);
-  const [thinkingThreadIds, setThinkingThreadIds] = useState<string[]>([]);
-  const [error, setError] = useState<{ threadId: string; message: string; settings?: boolean; quota?: boolean; retryContent?: string } | null>(null);
+  const runs = useChatRuns((state) => state.runs);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [contextTipOpen, setContextTipOpen] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
@@ -78,7 +78,10 @@ export function AIChat({ global = false, compact = false, home = false }: AIChat
   const session = state.chatSessions[threadId];
   const messages = state.chatThreads[threadId] ?? [];
   const pending = state.pendingProposals.filter((proposal) => proposal.threadId === threadId && proposal.status === 'pending');
-  const thinking = thinkingThreadIds.includes(threadId);
+  const run = runs[threadId];
+  const thinking = run?.running ?? false;
+  const error = run?.error;
+  const setError = (value: ChatRunError | null) => setChatRunError(value?.threadId ?? threadId, value ?? undefined);
   const providerId = getActiveProvider();
   const providerName = { openai: 'OpenAI', anthropic: 'Anthropic', gemini: 'Gemini', codex: 'Codex' }[providerId];
   const currentModelLabel = providerId === 'codex' ? codexModels.find((item) => item.id === selectedCodexModel)?.label ?? modelName : formatModelLabel(providerName, providerId === 'gemini' ? selectedModel || modelName : modelName);
@@ -193,7 +196,7 @@ export function AIChat({ global = false, compact = false, home = false }: AIChat
   useLayoutEffect(() => {
     const thread = threadRef.current;
     if (thread) thread.scrollTop = thread.scrollHeight;
-  }, [threadId, messages.length, thinking, error, pending.length]);
+  }, [threadId, messages.length, thinking, run?.progress.length, error, pending.length]);
 
   const data = useMemo<WorkspaceStateData>(() => ({
     version: state.version, projects: state.projects, folders: state.folders, notes: state.notes, activeNoteId: state.activeNoteId,
@@ -205,7 +208,7 @@ export function AIChat({ global = false, compact = false, home = false }: AIChat
     const content = (prefill ?? inputRef.current?.value ?? '').trim() || (!retry && draftAttachments.length ? 'Lee los archivos adjuntos.' : '');
     if (preparing) return;
     const greetingOnly = /^(?:hola+|hello|hi|hey|buenas|buenos d[ií]as|buenas tardes|buenas noches)[!¡?.\s]*$/i.test(content) && !state.aiTextSelection && !draftAttachments.length && !(retry && messages.at(-1)?.attachments?.length);
-    if (!content || (threadId && thinkingThreadIds.includes(threadId))) return;
+    if (!content || (threadId && useChatRuns.getState().runs[threadId]?.running)) return;
     const reuseLastMessage = retry && messages.at(-1)?.role === 'user' && messages.at(-1)?.content === content;
     if (!retry && inputRef.current) { inputRef.current.value = ''; resizeComposer(); }
     const sendingThreadId = threadId || state.createChatSession(scope);
@@ -218,7 +221,8 @@ export function AIChat({ global = false, compact = false, home = false }: AIChat
     const userMessage = reuseLastMessage ? messages.at(-1)! : { ...newChatMessage('user', content), ...(draftAttachments.length ? { attachments: draftAttachments } : {}) };
     if (!retry) setAttachments((current) => ({ ...current, [draftKey]: [] }));
     if (!reuseLastMessage) state.appendChatMessage(sendingThreadId, userMessage);
-    setThinkingThreadIds((current) => [...current, sendingThreadId]);
+    if (!startChatRun(sendingThreadId)) return;
+    const progress = (message: string) => chatProgress(sendingThreadId, message);
     try {
       const conversation = (reuseLastMessage ? messages : [...messages, userMessage]).slice(-20);
       const permissions = getAIPermissions();
@@ -251,7 +255,8 @@ export function AIChat({ global = false, compact = false, home = false }: AIChat
       let webEnabled = providerId !== 'gemini' && !greetingOnly;
       let response: AIResponse | undefined;
       for (let round = 0; round < 6; round++) {
-        response = await aiProvider.complete(history, context, { global, web: webEnabled, model: providerId === 'gemini' ? selectedModel || undefined : providerId === 'codex' ? selectedCodexModel || undefined : undefined, thinking: providerId === 'gemini' ? extendedReasoning ? 'extended' : 'standard' : undefined, effort: providerId === 'codex' ? codexEffort || undefined : undefined });
+        progress(round === 0 ? 'Consultando al modelo…' : 'Analizando la información consultada…');
+        response = await aiProvider.complete(history, context, { global, web: webEnabled, model: providerId === 'gemini' ? selectedModel || undefined : providerId === 'codex' ? selectedCodexModel || undefined : undefined, thinking: providerId === 'gemini' ? extendedReasoning ? 'extended' : 'standard' : undefined, effort: providerId === 'codex' ? codexEffort || undefined : undefined, onProgress: progress });
         profileUpdates.splice(0, profileUpdates.length, ...validProfileUpdates(response.profileUpdates));
         response.sources?.forEach((source) => { if (/^https?:\/\//.test(source.url)) sourceLinks.set(source.url, source); });
         const searchRequested = providerId === 'gemini' && !greetingOnly && !webEnabled && response.searchWeb === true;
@@ -267,12 +272,18 @@ export function AIChat({ global = false, compact = false, home = false }: AIChat
         if (!requestedFiles.length && !requestedBlocks.length && !requestedInk.length && !requestedSections.length && !searchRequested) {
           if ((response.readFiles?.length || response.readBlocks?.length || response.readInk?.length || response.readWorkspace?.length) && !response.text?.trim()) {
             if (++readRecoveryAttempts > 2 || round === 5) throw new Error('La IA está repitiendo solicitudes de lectura. No ha completado la revisión; vuelve a intentarlo.');
+            progress('Revisando el contexto ya disponible…');
             context.push({ id: `read-status-${round}`, type: 'tool-status', content: `No new content was read by this request. Sections already supplied: ${[...readWorkspaceSections].join(', ')}. File outlines already supplied: ${[...readIds].join(', ')}. Block contents already supplied: ${[...readBlockIds].join(', ')}. Inspect the context already provided instead of requesting it again. Any requested ID absent from the supplied accessible file map is unavailable; do not invent it. Now answer the user using the available evidence, noting any missing information, or request different accessible content if genuinely needed. Do not claim a complete review of unread content.` });
             continue;
           }
           break;
         }
         if (round === 5) throw new Error('The assistant needs more document sections to finish this request. Try narrowing the question.');
+        const sectionNames: Record<string, string> = { calendar: 'calendario', tasks: 'recordatorios y tareas', profile: 'memoria personal', gym: 'gimnasio', context: 'información de los proyectos' };
+        if (requestedSections.length) progress(`Consultando ${requestedSections.map((section) => sectionNames[section]).join(', ')}…`);
+        if (requestedFiles.length || requestedBlocks.length) progress('Leyendo los documentos necesarios…');
+        if (requestedInk.length) progress('Revisando dibujos y anotaciones…');
+        if (searchRequested) progress('Activando la búsqueda en internet…');
         const files = readWorkspaceFiles(data, requestedFiles, access);
         const workspaceSections = requestedSections.flatMap((section) => section === 'profile'
           ? [{ id: 'personal-profile', type: 'personal-profile', content: profileDetails(useWorkspace.getState().personalProfile) }]
@@ -334,7 +345,7 @@ export function AIChat({ global = false, compact = false, home = false }: AIChat
       }
     } catch (caught) {
       if (useWorkspace.getState().chatSessions[sendingThreadId]) setError({ threadId: sendingThreadId, message: caught instanceof AIQuotaError ? 'Has alcanzado un límite de Gemini API. Prueba otro modelo o consulta tu cuota.' : caught instanceof AIConfigurationError ? 'This provider has no server-side API key yet. Open Settings to configure it securely.' : caught instanceof AIUnavailableError ? 'Gemini is busy right now. Please try again shortly.' : caught instanceof Error ? caught.message : 'The assistant could not respond.', settings: caught instanceof AIConfigurationError, quota: caught instanceof AIQuotaError, retryContent: content });
-    } finally { setThinkingThreadIds((current) => current.filter((id) => id !== sendingThreadId)); }
+    } finally { finishChatRun(sendingThreadId); }
   }
 
   function modify(id: string, current: string) {
@@ -390,7 +401,7 @@ export function AIChat({ global = false, compact = false, home = false }: AIChat
       {compact && messages.length === 0 && providerConnected !== null && <div className="provider-empty">{providerConnected ? `Using ${currentModelLabel}${providerId === 'codex' && codexEffortText ? ` · ${codexEffortText}` : ''}` : 'No API connected'}</div>}
       {messages.length === 0 && !compact && <div className="message assistant"><div className="ai-avatar"><Sparkles size={13} /></div><div>{greeting}</div></div>}
       {messages.map((message) => <div key={message.id} className={`message ${message.role}`}>{message.role === 'assistant' && !compact && <div className="ai-avatar"><Sparkles size={13} /></div>}<div className="message-body">{message.role === 'assistant' ? <Suspense fallback={null}><AIMessageContent content={message.content} /></Suspense> : <>{message.content}{message.attachments?.length ? <div className="chat-message-attachments">{message.attachments.map((attachment) => <div key={attachment.id}><Paperclip size={13} /><span>{attachment.name}</span>{attachment.images[0] && <img src={attachment.images[0]} alt={attachment.name} />}</div>)}</div> : null}</>}{message.sources && message.sources.length > 0 && <div className="message-sources">Sources: {message.sources.map((source, index) => <a key={`${source.url}:${index}`} href={source.url} target="_blank" rel="noopener noreferrer">{source.title}</a>)}</div>}</div></div>)}
-      {thinking && <div className="message assistant">{!compact && <div className="ai-avatar"><Sparkles size={13} /></div>}<div className="typing"><i /><i /><i /></div></div>}
+      {thinking && <div className="message assistant">{!compact && <div className="ai-avatar"><Sparkles size={13} /></div>}<div className="chat-progress" role="status" aria-live="polite"><div className="typing"><i /><i /><i /></div>{run?.progress.map((message, index) => <p key={`${index}:${message}`}>{message}</p>)}</div></div>}
       {error?.threadId === threadId && <div className="ai-error"><Settings size={16} /><span>{error.message}</span>{error.retryContent && !error.settings && <button onClick={() => void send(error.retryContent, true)}>Reintentar</button>}{error.settings && <button onClick={() => state.setActiveView('settings')}>Open settings</button>}{error.quota && <>{compact && <button onClick={() => setModelMenuOpen(true)}>Cambiar modelo</button>}<a href="https://ai.dev/rate-limit" target="_blank" rel="noopener noreferrer">Ver cuota</a></>}</div>}
       {pending.length > 0 && <div className="proposal-queue"><div className="proposal-heading"><span>First proposal</span><span>{pending.length} pending</span></div>
         <div className="proposal"><strong>{pending[0].title}</strong><p>{pending[0].description}</p>{pending[0].before && <div className="diff-row removed">− {pending[0].before}</div>}<div className="diff-row added">+ {pending[0].after}</div>

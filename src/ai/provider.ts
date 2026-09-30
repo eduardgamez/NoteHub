@@ -1,3 +1,4 @@
+import { readProgressStream } from './progressStream';
 import type { ProfileUpdate, ProposalKind } from '../types';
 import { cloudSync } from '../sync/cloudSync';
 import { getProviderKey } from './keyVault';
@@ -22,7 +23,7 @@ export interface CodexLoginState { status: 'idle' | 'pending' | 'complete' | 'fa
 export interface AIProvider {
   id: string;
   name: string;
-  complete(messages: AIMessage[], context: AIContextItem[], options?: { global?: boolean; web?: boolean; purpose?: 'transcribe'; model?: string; thinking?: 'standard' | 'extended'; effort?: string }): Promise<AIResponse>;
+  complete(messages: AIMessage[], context: AIContextItem[], options?: { global?: boolean; web?: boolean; purpose?: 'transcribe'; model?: string; thinking?: 'standard' | 'extended'; effort?: string; onProgress?: (text: string) => void }): Promise<AIResponse>;
 }
 
 export class AIConfigurationError extends Error {}
@@ -33,14 +34,15 @@ export class ServerAIProvider implements AIProvider {
   id = 'notehub-server';
   name = 'NoteHub secure server';
 
-  async complete(messages: AIMessage[], context: AIContextItem[], options?: { global?: boolean; web?: boolean; purpose?: 'transcribe'; model?: string; thinking?: 'standard' | 'extended'; effort?: string }): Promise<AIResponse> {
+  async complete(messages: AIMessage[], context: AIContextItem[], options?: { global?: boolean; web?: boolean; purpose?: 'transcribe'; model?: string; thinking?: 'standard' | 'extended'; effort?: string; onProgress?: (text: string) => void }): Promise<AIResponse> {
     const accessToken = await cloudSync.accessToken();
     const provider = getActiveProvider();
     const providerKey = provider === 'codex' ? undefined : await getProviderKey(provider);
     const response = await fetch('/api/ai/complete', {
       method: 'POST', headers: { 'Content-Type': 'application/json', ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
-      body: JSON.stringify({ provider, providerKey, messages, context, global: options?.global, permissions: { web: options?.web }, purpose: options?.purpose, model: options?.model, thinking: options?.thinking, effort: options?.effort }),
+      body: JSON.stringify({ provider, providerKey, messages, context, global: options?.global, permissions: { web: options?.web }, purpose: options?.purpose, model: options?.model, thinking: options?.thinking, effort: options?.effort, stream: provider === 'codex' && Boolean(options?.onProgress) }),
     });
+    if (response.ok && response.headers.get('content-type')?.includes('text/event-stream')) return readProgressStream(response, options?.onProgress);
     const result = await response.json().catch(() => ({ error: 'The AI server returned an invalid response.' }));
     if (!response.ok) {
       const message = typeof result.error === 'string' ? result.error : 'AI request failed.';
