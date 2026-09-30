@@ -832,3 +832,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, [contentedita
   .project-layout .ai-panel-toggle { right: calc(12px + env(safe-area-inset-right, 0px)); }
   .project-sidebar-heading .project-sidebar-close { display: grid; }
 }
+
+html:has(.home-layout), body:has(.home-layout),
+.home-layout, .home-layout .ai-thread, .home-layout .project-grid.scrollable {
+  overscroll-behavior-y: none;
+}
