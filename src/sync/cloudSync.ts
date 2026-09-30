@@ -65,8 +65,8 @@ export const cloudSync = {
   },
   async status(): Promise<CloudSyncStatus> {
     if (!client) return { configured: false, connected: false };
-    const { data: { user } } = await client.auth.getUser();
-    return { configured: true, connected: Boolean(user), email: user?.email };
+    const { data: { session } } = await client.auth.getSession();
+    return { configured: true, connected: Boolean(session), email: session?.user.email };
   },
   async accessToken(): Promise<string | undefined> {
     if (!client) return undefined;
@@ -105,7 +105,13 @@ export const cloudSync = {
     const { error } = await client.auth.signInWithPassword({ email, password });
     if (error) throw error;
   },
-  async signOut() { if (client) await client.auth.signOut(); },
+  async signOut() {
+    if (!client) return;
+    const { error } = await client.auth.signOut({ scope: 'local' });
+    if (error) throw error;
+    window.clearTimeout(snapshotTimer);
+    if (channel) { await client.removeChannel(channel); channel = null; }
+  },
   async loadSnapshot(): Promise<WorkspaceStateData | null> {
     if (!client) return null;
     const { data: { user } } = await client.auth.getUser(); if (!user) return null;

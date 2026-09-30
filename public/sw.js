@@ -1,4 +1,4 @@
-const CACHE = 'notehub-shell-v4';
+const CACHE = 'notehub-shell-v5';
 const ROOT = new URL('./', self.registration.scope).pathname;
 const CORE = [ROOT, `${ROOT}manifest.webmanifest`, `${ROOT}notehub-mark.svg`, `${ROOT}notehub-192.png`, `${ROOT}notehub-512.png`];
 

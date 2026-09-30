@@ -52,6 +52,15 @@ export function SettingsView() {
     return () => clearInterval(timer);
   }, [codexLogin.status]);
 
+  async function signOut() {
+    setSyncMessage('');
+    try {
+      await cloudSync.signOut();
+      setSyncStatus({ configured: true, connected: false });
+      setSyncPassword(''); setPasswordConfirm(''); setEmailProof(''); setCodeSent(false);
+      setSyncMessage('Signed out on this device.');
+    } catch (error) { setSyncMessage(error instanceof Error ? error.message : 'Could not sign out.'); }
+  }
   function choose(id: ProviderId) { setActiveProvider(id); setActive(id); setChecking(true); setKeyDraft(''); setKeyMessage(''); }
   async function saveKey(event: React.FormEvent) {
     event.preventDefault(); setKeyMessage('');
@@ -114,12 +123,12 @@ export function SettingsView() {
     <section className="settings-section column"><div className="settings-copy"><div className="settings-icon purple"><ShieldCheck size={18} /></div><div><h2>AI permissions</h2><p>Read access is explicit. Writes always remain proposal-only regardless of these settings.</p></div></div><div className="permission-grid">{([
       ['readCurrentFile', 'Read current file'], ['searchFiles', 'Search other files'], ['readProjectContext', 'Read project memory'], ['inspectCalendar', 'Inspect calendar & tasks'], ['inspectGym', 'Inspect gym history'],
     ] as Array<[keyof AIPermissions, string]>).map(([key, label]) => <label key={key}><span>{label}</span><button className={permissions[key] ? 'enabled' : ''} onClick={() => togglePermission(key)} aria-pressed={permissions[key]}><i /></button></label>)}</div></section>
-    <section className="settings-section sync-settings"><div className="settings-copy"><div className="settings-icon"><Cloud size={18} /></div><div><h2>Multi-device sync</h2><p>{syncStatus.connected ? `Signed in as ${syncStatus.email}. Changes sync live and offline operations remain queued.` : syncStatus.configured ? 'Sign in with the same email on every device to share the workspace.' : 'Local-first mode is active. Configure Supabase to enable real-time device sync.'}</p></div></div>
+    <section className="settings-section sync-settings"><div className="settings-copy"><div className="settings-icon"><Cloud size={18} /></div><div><h2>Multi-device sync</h2><p>{syncStatus.connected ? <>Signed in as <strong>{syncStatus.email}</strong>. Your session stays signed in on this device until you sign out. Changes sync live and offline operations remain queued.</> : syncStatus.configured ? 'Sign in with the same email on every device to share the workspace.' : 'Local-first mode is active. Configure Supabase to enable real-time device sync.'}</p></div></div>
       {syncStatus.connected ? <form onSubmit={saveSyncPassword}>
         <input type="password" autoComplete="new-password" minLength={12} required value={syncPassword} onChange={(event) => setSyncPassword(event.target.value)} placeholder="New sync password" aria-label="New sync password" />
         <input type="password" autoComplete="new-password" minLength={12} required value={passwordConfirm} onChange={(event) => setPasswordConfirm(event.target.value)} placeholder="Confirm password" aria-label="Confirm sync password" />
         <button className="primary-button" type="submit">Set password</button>
-        <button className="secondary-button" type="button" onClick={() => void cloudSync.signOut().then(() => setSyncStatus({ configured: true, connected: false }))}>Sign out</button>
+        <button className="secondary-button" type="button" onClick={() => void signOut()}>Sign out</button>
         {syncMessage && <small>{syncMessage}</small>}
       </form> : syncStatus.configured ? <form onSubmit={passwordMode ? signInWithPassword : codeSent ? verifyEmail : connect}>
         <input type="email" required value={email} onChange={(event) => { setEmail(event.target.value); setCodeSent(false); }} placeholder="you@example.com" aria-label="Sync email" />

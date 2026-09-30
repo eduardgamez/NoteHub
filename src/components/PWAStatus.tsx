@@ -13,16 +13,22 @@ export function PWAStatus() {
     const refreshAfterActivation = () => window.location.reload();
     window.addEventListener('beforeinstallprompt', captureInstall);
     navigator.serviceWorker?.addEventListener('controllerchange', refreshAfterActivation);
+    let registration: ServiceWorkerRegistration | undefined;
+    const checkUpdate = () => { if (!document.hidden) void registration?.update().catch(() => {}); };
+    window.addEventListener('focus', checkUpdate);
+    document.addEventListener('visibilitychange', checkUpdate);
     if ('serviceWorker' in navigator && import.meta.env.PROD) {
-      void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).then((registration) => {
-        if (registration.waiting) setWaiting(registration.waiting);
-        registration.addEventListener('updatefound', () => {
-          const worker = registration.installing;
-          worker?.addEventListener('statechange', () => { if (worker.state === 'installed' && navigator.serviceWorker.controller) setWaiting(worker); });
+      void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`, { updateViaCache: 'none' }).then((registered) => {
+        registration = registered;
+        checkUpdate();
+        if (registered.waiting) { setWaiting(registered.waiting); setDismissed(false); }
+        registered.addEventListener('updatefound', () => {
+          const worker = registered.installing;
+          worker?.addEventListener('statechange', () => { if (worker.state === 'installed' && navigator.serviceWorker.controller) { setWaiting(worker); setDismissed(false); } });
         });
       });
     }
-    return () => { window.removeEventListener('beforeinstallprompt', captureInstall); navigator.serviceWorker?.removeEventListener('controllerchange', refreshAfterActivation); };
+    return () => { window.removeEventListener('focus', checkUpdate); document.removeEventListener('visibilitychange', checkUpdate); window.removeEventListener('beforeinstallprompt', captureInstall); navigator.serviceWorker?.removeEventListener('controllerchange', refreshAfterActivation); };
   }, []);
 
   if (dismissed || (!installPrompt && !waiting)) return null;
