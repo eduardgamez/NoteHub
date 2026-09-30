@@ -241,9 +241,11 @@ export function AIChat({ global = false, compact = false, home = false }: AIChat
       }
       const history: AIMessage[] = conversation.map(({ role, content: messageContent }) => ({ role, content: messageContent }));
       const readIds = new Set<string>();
+      const attemptedFileReads = new Set<string>();
       const readBlockIds = new Set<string>();
       const readInkIds = new Set<string>();
-      const readWorkspaceSections = new Set<string>();
+      const readWorkspaceSections = new Set<string>(greetingOnly ? [] : ['profile']);
+      let readRecoveryAttempts = 0;
       const sourceLinks = new Map<string, { title: string; url: string }>();
       const profileUpdates: ProfileUpdate[] = [];
       let webEnabled = providerId !== 'gemini' && !greetingOnly;
@@ -256,14 +258,18 @@ export function AIChat({ global = false, compact = false, home = false }: AIChat
         if (searchRequested) webEnabled = true;
         const noteForRegion = (id: string) => Object.values(data.notes).find((item) => id.startsWith(`${item.id}:`))?.id;
         const requiresOutline = [...(response.readBlocks ?? []), ...(response.readInk ?? [])].map(noteForRegion).filter((id): id is string => typeof id === 'string' && !readIds.has(id));
-        const requestedFiles = [...new Set([...(response.readFiles ?? []), ...requiresOutline])].filter((id) => !readIds.has(id) && Boolean(data.notes[id]));
+        const requestedFiles = [...new Set([...(response.readFiles ?? []), ...requiresOutline])].filter((id) => !attemptedFileReads.has(id) && Boolean(data.notes[id]));
         const selectedRegions = new Set(selectedBlockIds.flatMap((id) => [id, `${id}:ink`]));
         const mayReadRegion = (id: string) => { const noteId = noteForRegion(id); return selectedRegions.has(id) || Boolean(noteId && readIds.has(noteId)); };
         const requestedBlocks = (response.readBlocks ?? []).filter((id) => !readBlockIds.has(id) && mayReadRegion(id));
         const requestedInk = (response.readInk ?? []).filter((id) => !readInkIds.has(id) && mayReadRegion(id));
         const requestedSections = (response.readWorkspace ?? []).filter((section) => !readWorkspaceSections.has(section));
         if (!requestedFiles.length && !requestedBlocks.length && !requestedInk.length && !requestedSections.length && !searchRequested) {
-          if ((response.readFiles?.length || response.readBlocks?.length || response.readInk?.length || response.readWorkspace?.length) && !response.text) throw new Error('The assistant could not access the requested document sections.');
+          if ((response.readFiles?.length || response.readBlocks?.length || response.readInk?.length || response.readWorkspace?.length) && !response.text?.trim()) {
+            if (++readRecoveryAttempts > 2 || round === 5) throw new Error('La IA está repitiendo solicitudes de lectura. No ha completado la revisión; vuelve a intentarlo.');
+            context.push({ id: `read-status-${round}`, type: 'tool-status', content: `No new content was read by this request. Sections already supplied: ${[...readWorkspaceSections].join(', ')}. File outlines already supplied: ${[...readIds].join(', ')}. Block contents already supplied: ${[...readBlockIds].join(', ')}. Inspect the context already provided instead of requesting it again. Any requested ID absent from the supplied accessible file map is unavailable; do not invent it. Now answer the user using the available evidence, noting any missing information, or request different accessible content if genuinely needed. Do not claim a complete review of unread content.` });
+            continue;
+          }
           break;
         }
         if (round === 5) throw new Error('The assistant needs more document sections to finish this request. Try narrowing the question.');
@@ -276,10 +282,11 @@ export function AIChat({ global = false, compact = false, home = false }: AIChat
         const blocks = readWorkspaceBlocks(data, contentBlockIds, access);
         const blockVisuals = (await Promise.all(contentBlockIds.map((id) => renderWorkspaceBlockVisual(data, id, access, note?.blocks.some((block) => `${note.id}:${block.id}` === id) && page ? readDocumentLayout(page) : undefined)))).filter((item): item is NonNullable<typeof item> => item !== null);
         const ink = requestedInk.map((id) => renderWorkspaceInk(data, id, access)).filter((item): item is NonNullable<typeof item> => item !== null);
-        if (!files.length && !workspaceSections.length && !blocks.length && !blockVisuals.length && !ink.length && !searchRequested) throw new Error('The assistant could not access the requested document sections.');
+        if (!files.length && !workspaceSections.length && !blocks.length && !blockVisuals.length && !ink.length && !searchRequested) context.push({ id: `unavailable-read-${round}`, type: 'tool-status', content: 'The requested content is unavailable or access is disabled. Explain that limitation; use accessible context or request a different accessible section. Do not repeat this request or claim to have read it.' });
         const transcripts = cachedTranscripts(data, [...blockVisuals, ...ink.filter((item) => !linkedInkBlocks.includes(item.id.slice(0, -4)))]);
-        requestedFiles.forEach((id) => readIds.add(id));
-        requestedBlocks.forEach((id) => readBlockIds.add(id));
+        requestedFiles.forEach((id) => attemptedFileReads.add(id));
+        files.forEach((item) => readIds.add(item.id));
+        blocks.forEach((item) => readBlockIds.add(item.id));
         requestedInk.forEach((id) => readInkIds.add(id));
         requestedSections.forEach((section) => readWorkspaceSections.add(section));
         context.push(...files, ...workspaceSections, ...blocks, ...blockVisuals, ...ink, ...transcripts);
