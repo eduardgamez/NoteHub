@@ -72,3 +72,37 @@ describe('reminder clock placement', () => {
     expect(left.style.top).not.toBe(screen.getByRole('button', { name: 'Reminder: later' }).style.top);
   });
 });
+
+describe('inline reminder editor', () => {
+  it('edits title and tasks, saves an all-day date, restores timing and deletes the reminder', () => {
+    const due = new Date(); due.setHours(18, 30, 0, 0);
+    useWorkspace.setState({ tasks: [{ id: 'editable', title: 'Gastos', reminder: true, done: false, due: due.toISOString(), checklist: [{ id: 'first', text: 'Revisar', done: false }, { id: 'second', text: 'Separar', done: false }] }] });
+    render(<CalendarView />);
+    fireEvent.click(screen.getByRole('button', { name: 'Reminder: Gastos' }));
+    let dialog = screen.getByRole('dialog', { name: 'Manage reminder' });
+    fireEvent.change(within(dialog).getByLabelText('Título del recordatorio'), { target: { value: 'Gastos del mes' } });
+    fireEvent.change(within(dialog).getByDisplayValue('Revisar'), { target: { value: 'Revisar gastos' } });
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Revisar gastos' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Eliminar tarea Separar' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Añadir tarea' }));
+    fireEvent.change(within(dialog).getAllByPlaceholderText('Tarea').at(-1)!, { target: { value: 'Guardar recibos' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Quitar hora' }));
+    expect(within(dialog).getByLabelText('Hora del recordatorio')).toBeDisabled();
+    expect(within(dialog).getByLabelText('Hora del recordatorio')).toHaveValue('18:30');
+    expect(useWorkspace.getState().tasks[0].title).toBe('Gastos');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(useWorkspace.getState().tasks[0].due).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(useWorkspace.getState().tasks[0].checklist.map((item) => [item.text, item.done])).toEqual([['Revisar gastos', true], ['Guardar recibos', false]]);
+    expect(screen.getByRole('button', { name: 'Reminder: Gastos del mes' })).toHaveClass('calendar-all-day');
+    fireEvent.click(screen.getByRole('button', { name: 'Reminder: Gastos del mes' }));
+    dialog = screen.getByRole('dialog', { name: 'Manage reminder' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Activar hora' }));
+    fireEvent.change(within(dialog).getByLabelText('Hora del recordatorio'), { target: { value: '10:45' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(new Date(useWorkspace.getState().tasks[0].due!).getMinutes()).toBe(45);
+    expect(screen.getByRole('button', { name: 'Reminder: Gastos del mes' })).not.toHaveClass('calendar-all-day');
+    fireEvent.click(screen.getByRole('button', { name: 'Reminder: Gastos del mes' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete reminder' }));
+    expect(useWorkspace.getState().tasks).toHaveLength(0);
+  });
+});

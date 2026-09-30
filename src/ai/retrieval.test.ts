@@ -65,7 +65,7 @@ describe('workspace retrieval', () => {
 describe('complete calendar access in every chat', () => {
   const data = structuredClone(seedWorkspace);
   data.calendarEvents = Array.from({ length: 75 }, (_, index) => ({ id: `event-${index}`, title: index === 0 ? 'Exam' : `Meeting ${index}`, start: '2026-10-01T09:00:00Z', end: '2026-10-01T10:00:00Z', color: 'green' as const, projectId: index % 2 ? 'other-project' : undefined, notes: 'Notas del evento', checklist: [{ id: 'item', text: 'Traer apuntes', done: false }] }));
-  data.tasks = Array.from({ length: 75 }, (_, index) => ({ id: `task-${index}`, title: index === 0 ? 'Exam reminder' : `Reminder ${index}`, done: index % 2 === 0, reminder: true, projectId: 'other-project', due: index % 2 ? undefined : '2026-10-01T08:00:00Z', checklist: [] }));
+  data.tasks = Array.from({ length: 75 }, (_, index) => ({ id: `task-${index}`, title: index === 0 ? 'Exam reminder' : `Reminder ${index}`, done: index % 2 === 0, reminder: true, projectId: 'other-project', due: index % 2 ? undefined : '2000-10-01T08:00:00Z', checklist: [] }));
 
   it('returns all events and reminders without project, match or 40-item filtering', () => {
     const calendar = readWorkspaceSection(data, 'calendar', 'Exam', { projectId: 'university' });

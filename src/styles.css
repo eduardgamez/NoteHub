@@ -887,3 +887,38 @@ html:has(.home-layout), body:has(.home-layout),
 .home-ai .home-chat-toolbar { width: min(468px, calc(100% - 32px)); margin-left: auto; margin-right: auto; }
 .home-ai .ai-composer-wrap { width: min(500px, 100%); align-self: center; }
 @media (max-width: 820px) { .home-ai .home-chat-toolbar { width: calc(100% - 8px); margin-left: 4px; margin-right: 4px; } }
+.reminder-popover.reminder-editor { width: min(360px, calc(100vw - 24px)); padding: 17px; gap: 18px; border-radius: 12px; }
+.reminder-title-line { display: flex; align-items: flex-start; gap: 5px; color: var(--text); line-height: 1.5; }
+.reminder-title-line strong { flex: none; font-size: 12px; padding-top: 1px; }
+.reminder-title-line textarea { flex: 1; width: 0; min-width: 0; min-height: 22px; resize: none; overflow: hidden; border: 0; outline: 0; padding: 1px 0; background: transparent; color: var(--text); font: inherit; font-size: 12px; line-height: 1.5; }
+.reminder-close, .reminder-task-remove { flex: none; display: grid; place-items: center; width: 20px; height: 22px; padding: 0; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+.reminder-moment { display: flex; align-items: center; gap: 6px; }
+.reminder-moment > span { flex: none; font-size: 11px; color: var(--text-soft); }
+.reminder-editor .reminder-moment input { min-width: 0; padding: 0 5px; font-size: 10px; }
+.reminder-moment input[type='date'] { flex: 1.6; width: 0; }
+.reminder-moment input[type='time'] { flex: 1; width: 0; }
+.reminder-moment .without-time { text-decoration: line-through; opacity: .45; }
+.reminder-time-toggle { flex: none; width: 24px; height: 28px; display: grid; place-items: center; padding: 0; border: 1px solid #e5c8c8; border-radius: 5px; background: #faeeee; color: #b97070; cursor: pointer; }
+.reminder-time-toggle.off { border-color: var(--line); background: var(--panel); color: var(--faint); }
+.reminder-editor-list { display: grid; gap: 8px; }
+.reminder-editor-task { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.reminder-task-check { flex: none; display: grid; place-items: center; width: 18px; height: 18px; padding: 0; border: 1px solid var(--line-strong); border-radius: 3px; background: transparent; color: white; cursor: pointer; }
+.reminder-task-check.done { background: var(--accent); border-color: var(--accent); }
+.reminder-editor .reminder-editor-task input { flex: 1; min-width: 0; padding: 0; height: 25px; border: 0; border-radius: 0; background: transparent; font-size: 12px; box-shadow: none; outline: none; }
+.reminder-editor-task input.done { text-decoration: line-through; color: var(--muted); }
+.reminder-editor-task input::placeholder { color: var(--faint); }
+.reminder-add-task { display: flex; align-items: center; gap: 7px; justify-self: start; padding: 3px 0; border: 0; background: transparent; color: var(--muted); font-size: 11px; cursor: pointer; }
+.reminder-editor-footer { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding-top: 8px; }
+.reminder-auto-status { margin-right: auto; font-size: 10px; color: var(--muted); }
+.reminder-editor-footer button { height: 31px; border: 1px solid var(--line); border-radius: 6px; padding: 0 10px; background: transparent; color: var(--text-soft); cursor: pointer; }
+.reminder-editor-footer .reminder-delete { display: grid; place-items: center; color: #b97070; }
+.reminder-editor-footer .reminder-save { min-width: 68px; border-color: var(--accent); background: var(--accent); color: white; }
+.week-calendar:has(.calendar-all-day) { grid-template-rows: 48px auto 812px; }
+.week-calendar:has(.calendar-all-day) .calendar-prehour { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; min-height: 25px; padding: 2px 3px; }
+.week-calendar:has(.calendar-all-day) .time-column, .week-calendar:has(.calendar-all-day) .day-column { grid-row: 3; }
+.calendar-reminder.calendar-all-day { position: static; flex: none; }
+.home-calendar .week-calendar:has(.calendar-all-day) { grid-template-rows: 41px auto minmax(0, 1fr); }
+@media (max-width: 820px) { .home-calendar .week-calendar:has(.calendar-all-day) { grid-template-rows: 36px auto minmax(0, 1fr); } }
+.reminder-time-field { position: relative; flex: 1; min-width: 0; }
+.reminder-editor .reminder-time-field input { width: 100%; }
+.reminder-time-field.without-time::after { content: ''; position: absolute; left: 7px; right: 10px; top: 50%; height: 1px; background: var(--muted); opacity: .55; pointer-events: none; }

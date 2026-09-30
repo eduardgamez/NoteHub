@@ -1,3 +1,4 @@
+import { reminderDone, isAllDayReminder } from '../lib/reminderTime';
 import type { AIContextItem } from './provider';
 import type { CanvasBlock, Note, WorkspaceStateData } from '../types';
 import type { AIPermissions } from './permissions';
@@ -33,7 +34,7 @@ export function retrieveWorkspaceContext(query: string, data: WorkspaceStateData
 
   if (!options.projectId) {
     if (!permissions || permissions.inspectCalendar) data.calendarEvents.filter((event) => score(event.title, queryTerms) > 0 || /calendar|free|available|when|study|exam/i.test(query)).slice(0, 12).forEach((event) => context.push({ id: event.id, type: 'calendar-event', content: `${event.title}: ${event.start}–${event.end}` }));
-    data.tasks.filter((task) => score(task.title, queryTerms) > 0 || /task|remind|checklist|todo/i.test(query)).slice(0, 12).forEach((task) => context.push({ id: task.id, type: 'task', content: `${task.reminder ? 'Reminder' : 'Task'} · ${task.done ? 'Done' : 'Open'}: ${task.title}${task.due ? ` · due ${task.due}` : ''}` }));
+    data.tasks.filter((task) => score(task.title, queryTerms) > 0 || /task|remind|checklist|todo/i.test(query)).slice(0, 12).forEach((task) => context.push({ id: task.id, type: 'task', content: `${task.reminder ? 'Reminder' : 'Task'} · ${reminderDone(task) ? 'Done' : 'Open'}: ${task.title}${task.due ? ` · due ${task.due}${isAllDayReminder(task) ? ' (todo el día, sin hora)' : ''}` : ''}` }));
     if ((!permissions || permissions.inspectGym) && /gym|workout|train|press|row|calf|weight|exercise|progress/i.test(query)) data.workouts.slice(-12).forEach((workout) => context.push({ id: workout.id, type: 'workout', content: `${workout.title} ${workout.startedAt}: ${workout.exercises.map((entry) => `${data.exercises.find((exercise) => exercise.id === entry.exerciseId)?.name}: ${entry.sets.map((set) => `${set.weight}kg×${set.reps} RIR${set.rir ?? '?'}`).join(', ')}`).join('; ')}` }));
   }
 
@@ -63,7 +64,7 @@ export type WorkspaceSection = 'calendar' | 'tasks' | 'gym' | 'context';
 export function readWorkspaceSection(data: WorkspaceStateData, section: WorkspaceSection, query: string, options: { projectId?: string; permissions?: AIPermissions } = {}): AIContextItem[] {
   const queryTerms = terms(query);
   const checklistText = (items: Array<{ text: string; done: boolean }> = []) => items.length ? ` · checklist: ${items.map((item) => `${item.done ? '✓' : '○'} ${item.text}`).join('; ')}` : '';
-  const taskItem = (task: WorkspaceStateData['tasks'][number]): AIContextItem => ({ id: task.id, type: 'task', content: `${task.reminder ? 'Reminder' : 'Task'} · ${task.done ? 'Done' : 'Open'}: ${task.title}${task.due ? ` · due ${task.due}` : ''}${task.projectId ? ` · project=${task.projectId}` : ''}${checklistText(task.checklist)}` });
+  const taskItem = (task: WorkspaceStateData['tasks'][number]): AIContextItem => ({ id: task.id, type: 'task', content: `${task.reminder ? 'Reminder' : 'Task'} · ${reminderDone(task) ? 'Done' : 'Open'}: ${task.title}${task.due ? ` · due ${task.due}${isAllDayReminder(task) ? ' (todo el día, sin hora)' : ''}` : ''}${task.projectId ? ` · project=${task.projectId}` : ''}${checklistText(task.checklist)}` });
   const inProject = (projectId?: string) => !options.projectId || projectId === options.projectId;
   const result: AIContextItem[] = [];
   if (section === 'calendar' && options.permissions?.inspectCalendar !== false) {

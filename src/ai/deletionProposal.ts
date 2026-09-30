@@ -1,3 +1,4 @@
+import { isAllDayReminder, reminderDate, reminderDone } from '../lib/reminderTime';
 import type { CalendarEvent, Task } from '../types';
 
 const canonical = (value: unknown) => JSON.stringify(value, (_key, item) => item && typeof item === 'object' && !Array.isArray(item) ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item);
@@ -15,6 +16,6 @@ export function deletionSnapshotHasId(expected: unknown, id: string): boolean {
 }
 export function deletionPreview(target: CalendarEvent | Task): string {
   const date = (value: string) => new Date(value).toLocaleString();
-  const when = 'start' in target ? `${date(target.start)} – ${date(target.end)}` : target.due ? date(target.due) : 'Sin fecha';
-  return [target.title, when, 'done' in target ? target.done ? 'Completado' : 'Pendiente' : '', 'notes' in target ? target.notes : '', target.checklist?.map((item) => `${item.done ? '✓' : '○'} ${item.text}`).join('; ')].filter(Boolean).join(' · ');
+  const when = 'start' in target ? `${date(target.start)} – ${date(target.end)}` : target.due ? isAllDayReminder(target) ? `${reminderDate(target.due).toLocaleDateString()} · Todo el día` : date(target.due) : 'Sin fecha';
+  return [target.title, when, 'done' in target ? reminderDone(target) ? 'Completado' : 'Pendiente' : '', 'notes' in target ? target.notes : '', target.checklist?.map((item) => `${item.done ? '✓' : '○'} ${item.text}`).join('; ')].filter(Boolean).join(' · ');
 }
