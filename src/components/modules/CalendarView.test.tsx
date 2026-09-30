@@ -164,3 +164,30 @@ it('creates an all-day reminder with editable and reorderable tasks', () => {
   expect(task.checklist.map((item) => item.text)).toEqual(['Separar', 'Revisar recibos']);
   expect(task.done).toBe(false);
 });
+
+
+it('marks only elapsed events and reminders as done in week and month views', () => {
+  const now = new Date();
+  const past = new Date(now.getTime() - 60000).toISOString();
+  const future = new Date(now.getTime() + 3600000).toISOString();
+  useWorkspace.setState({
+    calendarEvents: [
+      { id: 'past-event', title: 'Pasado', start: new Date(now.getTime() - 3600000).toISOString(), end: past, color: 'green' },
+      { id: 'future-event', title: 'En curso', start: past, end: future, color: 'purple' },
+    ],
+    tasks: [
+      { id: 'past-reminder', title: 'Pasado', reminder: true, due: past, done: false, checklist: [] },
+      { id: 'future-reminder', title: 'Futuro', reminder: true, due: future, done: true, checklist: [] },
+    ],
+  });
+  render(<CalendarView />);
+  for (const view of ['week', 'month']) {
+    fireEvent.click(screen.getByRole('button', { name: view }));
+    expect(screen.getByRole('button', { name: 'Event: Pasado' })).toHaveClass('done');
+    expect(screen.getByRole('button', { name: 'Event: En curso' })).not.toHaveClass('done');
+    expect(screen.getByRole('button', { name: 'Reminder: Pasado' })).toHaveClass('done');
+    expect(screen.getByRole('button', { name: 'Reminder: Futuro' })).not.toHaveClass('done');
+  }
+  fireEvent.click(screen.getByRole('button', { name: 'Event: Pasado' }));
+  expect(within(screen.getByRole('dialog', { name: 'Manage event' })).getByText('Done')).toBeInTheDocument();
+});

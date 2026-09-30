@@ -1,5 +1,5 @@
 import { EditableTaskList } from './EditableTaskList';
-import { isAllDayReminder, reminderDate, reminderDone } from '../../lib/reminderTime';
+import { eventDone, isAllDayReminder, reminderDate, reminderDone } from '../../lib/reminderTime';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Bell, Check, ChevronLeft, ChevronRight, Clock3, Plus, Trash2, X } from 'lucide-react';
 import { useWorkspace } from '../../store/useWorkspace';
@@ -175,7 +175,7 @@ export function CalendarView() {
           const eventStart = new Date(event.start), eventEnd = new Date(event.end);
           const top = `clamp(2px, ${((eventStart.getHours() + eventStart.getMinutes() / 60) - 8) / hours.length * 100}%, calc(100% - 22px))`;
           const height = `max(22px, ${(eventEnd.getTime() - eventStart.getTime()) / 3600000 / hours.length * 100}%)`;
-          return <button key={event.id} className={`calendar-event ${event.color}`} style={{ top, height }} onClick={(click) => openEvent(event, click.currentTarget)} onDoubleClick={() => { removeEvent(event.id); setSelectedEvent(null); }} aria-label={`Event: ${event.title}`} title="Click to manage; double-click to delete"><strong>{event.title}</strong><EventProgress event={event} /><span><Clock3 size={10} /> {eventStart.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></button>;
+          return <button key={event.id} className={`calendar-event ${event.color} ${eventDone(event, now) ? 'done' : ''}`} style={{ top, height }} onClick={(click) => openEvent(event, click.currentTarget)} onDoubleClick={() => { removeEvent(event.id); setSelectedEvent(null); }} aria-label={`Event: ${event.title}`} title="Click to manage; double-click to delete"><strong>{event.title}</strong><EventProgress event={event} /><span><Clock3 size={10} /> {eventStart.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></button>;
         })}
         {datedTasks.filter((task) => !isAllDayReminder(task) && sameDay(reminderDate(task.due!), day)).map((task, index, dayTasks) => {
           const date = reminderDate(task.due!);
@@ -194,7 +194,7 @@ export function CalendarView() {
       <div className="reminder-title-line"><strong>Evento ·</strong><textarea aria-label="Título del evento" value={eventDraft.title} onChange={(event) => setEventDraft({ ...eventDraft, title: event.target.value })} rows={1} ref={(element) => { if (element) { element.style.height = 'auto'; element.style.height = `${element.scrollHeight}px`; } }} required /><button type="button" className="reminder-close" aria-label="Close event" onClick={() => setSelectedEvent(null)}><X size={14} /></button></div>
       {(['start', 'end'] as const).map((field) => <div className="reminder-moment" key={field}><span>{field === 'start' ? 'Inicio' : 'Fin'}</span><input aria-label={`Día de ${field === 'start' ? 'inicio' : 'fin'}`} type="date" value={eventDraft[field].slice(0, 10)} onChange={(event) => setEventDraft({ ...eventDraft, [field]: `${event.target.value}T${eventDraft[field].slice(11, 16)}` })} required /><input aria-label={`Hora de ${field === 'start' ? 'inicio' : 'fin'}`} type="time" value={eventDraft[field].slice(11, 16)} onChange={(event) => setEventDraft({ ...eventDraft, [field]: `${eventDraft[field].slice(0, 10)}T${event.target.value}` })} required /></div>)}
       <EditableTaskList items={eventDraft.checklist} onChange={(checklist) => setEventDraft({ ...eventDraft, checklist })} />
-      <div className="reminder-editor-footer"><button type="button" className="reminder-delete" aria-label="Delete event" onClick={() => { removeEvent(activeEvent.id); setSelectedEvent(null); }}><Trash2 size={16} /></button><button type="submit" className="reminder-save">Save</button></div>
+      <div className="reminder-editor-footer"><span className="reminder-auto-status">{eventDone(activeEvent, now) ? 'Done' : ''}</span><button type="button" className="reminder-delete" aria-label="Delete event" onClick={() => { removeEvent(activeEvent.id); setSelectedEvent(null); }}><Trash2 size={16} /></button><button type="submit" className="reminder-save">Save</button></div>
     </form>}
 
     {selectedTask && activeTask && <form ref={taskPopoverRef} className="reminder-popover reminder-editor" role="dialog" aria-label="Manage reminder" style={{ left: selectedTask.x, top: selectedTask.y, maxHeight: selectedTask.maxHeight }} onSubmit={saveReminder}>
@@ -225,7 +225,7 @@ function MonthGrid({ cursor, events, reminders, onOpenEvent, onRemoveEvent, onOp
   return <div className="month-calendar">
     {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => <div className="month-weekday" key={day}>{day}</div>)}
     {days.map((day) => <div className={`month-day ${day.getMonth() !== cursor.getMonth() ? 'outside' : ''} ${sameDay(day, new Date()) ? 'today' : ''}`} key={day.toISOString()}><strong>{day.getDate()}</strong>
-      {events.filter((event) => sameDay(new Date(event.start), day)).slice(0, 3).map((event) => <button type="button" className={`month-event ${event.color}`} key={event.id} aria-label={`Event: ${event.title}`} onClick={(click) => onOpenEvent(event, click.currentTarget)} onDoubleClick={() => onRemoveEvent(event.id)}>{event.title}<EventProgress event={event} /></button>)}
+      {events.filter((event) => sameDay(new Date(event.start), day)).slice(0, 3).map((event) => <button type="button" className={`month-event ${event.color} ${eventDone(event, now) ? 'done' : ''}`} key={event.id} aria-label={`Event: ${event.title}`} onClick={(click) => onOpenEvent(event, click.currentTarget)} onDoubleClick={() => onRemoveEvent(event.id)}>{event.title}<EventProgress event={event} /></button>)}
       {reminders.filter((task) => sameDay(reminderDate(task.due!), day)).map((task) => <button className={`month-reminder ${reminderDone(task, now) ? 'done' : ''}`} key={task.id} onMouseEnter={(event) => onHoverReminder(task, event.currentTarget)} onMouseLeave={onLeaveReminder} onFocus={(event) => onHoverReminder(task, event.currentTarget)} onBlur={onLeaveReminder} onClick={(event) => { onLeaveReminder(); onOpenReminder(task, event.currentTarget); }} aria-label={`Reminder: ${task.title}`}><Bell size={12} fill="currentColor" /></button>)}
     </div>)}
   </div>;
