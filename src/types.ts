@@ -129,7 +129,9 @@ export interface Workout {
   exercises: WorkoutExerciseLog[];
 }
 
-export interface ChatMessageRecord { id: string; role: 'user' | 'assistant'; content: string; createdAt: number; sources?: Array<{ title: string; url: string }> }
+export interface ChatAttachment { id: string; name: string; mime: string; size: number; text: string; images: string[] }
+
+export interface ChatMessageRecord { id: string; role: 'user' | 'assistant'; content: string; createdAt: number; sources?: Array<{ title: string; url: string }>; attachments?: ChatAttachment[] }
 export interface AITextSelection { noteId: string; text: string; blockIds: string[] }
 export type ProfileField = 'classes' | 'routines' | 'events' | 'style' | 'background' | 'topics';
 export interface PersonalProfile { answers: Partial<Record<ProfileField, string>>; notes: string; updatedAt: number }

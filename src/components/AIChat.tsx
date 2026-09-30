@@ -1,12 +1,13 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUp, CalendarDays, Check, ChevronDown, Clock3, Dumbbell, FileText, Lightbulb, Pencil, Plus, Settings, Sparkles, Trash2, X } from 'lucide-react';
+import { ArrowUp, CalendarDays, Check, ChevronDown, Clock3, Dumbbell, FileText, Lightbulb, Paperclip, Pencil, Plus, Settings, Sparkles, Trash2, X } from 'lucide-react';
 import { AIConfigurationError, AIQuotaError, AIUnavailableError, aiProvider, getActiveProvider, getCodexModels, getGeminiModels, getProviderStatus } from '../ai/provider';
+import { ATTACHMENT_ACCEPT, MAX_ATTACHMENT_BYTES, attachmentContext, attachmentSize, prepareAttachment } from '../ai/attachments';
 import { hasProviderKey } from '../ai/keyVault';
 import { readWorkspaceBlocks, readWorkspaceFiles, readWorkspaceSection, renderWorkspaceBlockVisual, renderWorkspaceInk, workspaceFileMap } from '../ai/retrieval';
 import { readDocumentLayout } from '../lib/documentInk';
 import { useWorkspace } from '../store/useWorkspace';
 import type { AIContextItem, AIMessage, AIResponse, CodexModelOption, GeminiModelOption } from '../ai/provider';
-import type { ChatMessageRecord, ProfileUpdate, WorkspaceStateData } from '../types';
+import type { ChatAttachment, ChatMessageRecord, ProfileUpdate, WorkspaceStateData } from '../types';
 import { getAIPermissions } from '../ai/permissions';
 import { getInkTranscript } from '../ai/inkTranscript';
 import { profileDetails, profileSummary, validProfileUpdates } from '../ai/personalProfile';
@@ -44,6 +45,10 @@ function cachedTranscripts(data: WorkspaceStateData, visuals: AIContextItem[]): 
 }
 
 export function AIChat({ global = false, compact = false, home = false }: AIChatProps) {
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
+  const [attachments, setAttachments] = useState<Record<string, ChatAttachment[]>>({});
+  const [preparing, setPreparing] = useState(false);
+  const [attachmentError, setAttachmentError] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const threadRef = useRef<HTMLDivElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
@@ -68,6 +73,8 @@ export function AIChat({ global = false, compact = false, home = false }: AIChat
   const scope = global ? 'global' : `project:${project?.id ?? 'unknown'}`;
   const sessions = Object.values(state.chatSessions).filter((item) => item.scope === scope).sort((a, b) => b.updatedAt - a.updatedAt);
   const threadId = state.chatSessions[state.activeChatIds[scope]]?.scope === scope ? state.activeChatIds[scope] : sessions[0]?.id ?? '';
+  const draftKey = `${scope}:${threadId}`;
+  const draftAttachments = attachments[draftKey] ?? [];
   const session = state.chatSessions[threadId];
   const messages = state.chatThreads[threadId] ?? [];
   const pending = state.pendingProposals.filter((proposal) => proposal.threadId === threadId && proposal.status === 'pending');
@@ -82,6 +89,25 @@ export function AIChat({ global = false, compact = false, home = false }: AIChat
   const greeting = global
     ? 'Tell me anything, ask across your workspace, or describe something you want to change. I’ll keep every proposed action queued for review.'
     : `I can help with ${project?.title ?? 'this project'}, including its notes and contextual memory. Select blocks on the canvas for focused help.`;
+
+  async function attachFiles(files: File[]) {
+    if (!files.length || preparing) return;
+    const key = draftKey;
+    const existing = attachments[key] ?? [];
+    if (existing.length + files.length > 6) { setAttachmentError('Puedes adjuntar hasta 6 archivos por mensaje.'); return; }
+    setPreparing(true); setAttachmentError('');
+    const ready = [...existing];
+    const errors: string[] = [];
+    for (const file of files) {
+      try {
+        const attachment = await prepareAttachment(file);
+        if (attachmentSize([...ready, attachment]) > MAX_ATTACHMENT_BYTES) throw new Error('Los adjuntos preparados superan 8 MB. Envía menos archivos por mensaje.');
+        ready.push(attachment);
+      } catch (error) { errors.push(error instanceof Error ? error.message : `No se pudo leer ${file.name}.`); }
+    }
+    setAttachments((current) => ({ ...current, [key]: ready }));
+    setAttachmentError(errors.join(' ')); setPreparing(false);
+  }
 
   function resizeComposer() {
     const textarea = inputRef.current;
@@ -176,8 +202,9 @@ export function AIChat({ global = false, compact = false, home = false }: AIChat
   }), [state.version, state.projects, state.folders, state.notes, state.activeNoteId, state.calendarEvents, state.tasks, state.reminderTemplates, state.exercises, state.routines, state.workouts, state.chatThreads, state.chatSessions, state.activeChatIds, state.pendingProposals, state.personalProfile]);
 
   async function send(prefill?: string, retry = false) {
-    const content = (prefill ?? inputRef.current?.value ?? '').trim();
-    const greetingOnly = /^(?:hola+|hello|hi|hey|buenas|buenos d[ií]as|buenas tardes|buenas noches)[!¡?.\s]*$/i.test(content) && !state.aiTextSelection;
+    const content = (prefill ?? inputRef.current?.value ?? '').trim() || (!retry && draftAttachments.length ? 'Lee los archivos adjuntos.' : '');
+    if (preparing) return;
+    const greetingOnly = /^(?:hola+|hello|hi|hey|buenas|buenos d[ií]as|buenas tardes|buenas noches)[!¡?.\s]*$/i.test(content) && !state.aiTextSelection && !draftAttachments.length && !(retry && messages.at(-1)?.attachments?.length);
     if (!content || (threadId && thinkingThreadIds.includes(threadId))) return;
     const reuseLastMessage = retry && messages.at(-1)?.role === 'user' && messages.at(-1)?.content === content;
     if (!retry && inputRef.current) { inputRef.current.value = ''; resizeComposer(); }
@@ -188,13 +215,16 @@ export function AIChat({ global = false, compact = false, home = false }: AIChat
     const personalSummary = profileChanged ? profileSummary(profileAtSend) : state.readProfileForChat(sendingThreadId);
     if (modelName) state.setChatSessionModel(sendingThreadId, currentModelLabel);
     setError(null);
-    const userMessage = reuseLastMessage ? messages.at(-1)! : newChatMessage('user', content);
+    const userMessage = reuseLastMessage ? messages.at(-1)! : { ...newChatMessage('user', content), ...(draftAttachments.length ? { attachments: draftAttachments } : {}) };
+    if (!retry) setAttachments((current) => ({ ...current, [draftKey]: [] }));
     if (!reuseLastMessage) state.appendChatMessage(sendingThreadId, userMessage);
     setThinkingThreadIds((current) => [...current, sendingThreadId]);
     try {
+      const conversation = (reuseLastMessage ? messages : [...messages, userMessage]).slice(-20);
       const permissions = getAIPermissions();
       const access = global ? { permissions } : { projectId: project?.id, currentNoteId: note?.id, selectedBlockIds: state.selectedIds, permissions };
       const context: AIContextItem[] = [
+        ...attachmentContext(conversation),
         { id: 'personal-profile-summary', type: 'personal-profile-summary', content: personalSummary || '(empty profile)' },
         ...(profileChanged && !greetingOnly ? [{ id: 'personal-profile-updated', type: 'personal-profile', content: profileDetails(profileAtSend) }] : []),
         ...(!greetingOnly ? [workspaceFileMap(data, access), ...(!global && note ? [{ id: note.id, type: 'current-file', content: `Open file: ${note.title}; project: ${project?.title ?? note.projectId}` }] : [])] : []),
@@ -209,7 +239,7 @@ export function AIChat({ global = false, compact = false, home = false }: AIChat
         const selectedVisuals = (await Promise.all(selectedBlockIds.map((id) => renderWorkspaceBlockVisual(data, id, selectedAccess, page ? readDocumentLayout(page) : undefined)))).filter((item): item is NonNullable<typeof item> => item !== null);
         context.push({ id: 'selected-blocks', type: 'selection', content: selectedBlockIds.join(', ') }, ...selectedBlocks, ...selectedVisuals, ...cachedTranscripts(data, selectedVisuals));
       }
-      const history: AIMessage[] = (reuseLastMessage ? messages : [...messages, userMessage]).slice(-20).map(({ role, content: messageContent }) => ({ role, content: messageContent }));
+      const history: AIMessage[] = conversation.map(({ role, content: messageContent }) => ({ role, content: messageContent }));
       const readIds = new Set<string>();
       const readBlockIds = new Set<string>();
       const readInkIds = new Set<string>();
@@ -308,7 +338,7 @@ export function AIChat({ global = false, compact = false, home = false }: AIChat
   const textSelection = !global && state.aiTextSelection?.noteId === note?.id ? state.aiTextSelection : null;
   const contextLabel = textSelection ? `Texto seleccionado · ${textSelection.blockIds.length} ${textSelection.blockIds.length === 1 ? 'bloque' : 'bloques'}` : selectedCount ? `${note.title} · ${selectedCount} selected block${selectedCount === 1 ? '' : 's'}` : state.activeView === 'note' ? note?.title ?? 'Document' : project?.title ?? 'Project';
 
-  return <div className={`ai-chat ${compact ? 'compact' : ''} ${global && !compact ? 'global-chat' : ''}`}>
+  return <div className={`ai-chat ${compact ? 'compact' : ''} ${global && !compact ? 'global-chat' : ''}`} onDragOver={(event) => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }} onDrop={(event) => { if (event.dataTransfer.files.length) { event.preventDefault(); void attachFiles(Array.from(event.dataTransfer.files)); } }}>
     {compact && <div className={`ai-chat-toolbar ${home ? 'home-chat-toolbar' : ''}`} ref={toolbarRef}>
       {canChooseModel ? <button type="button" className="ai-chat-title ai-chat-model-trigger" title={headerModel} aria-label="Choose AI model" aria-expanded={modelMenuOpen} onClick={() => { setModelMenuOpen(!modelMenuOpen); setHistoryOpen(false); }}>{titleContent}</button> : <div className="ai-chat-title">{titleContent}</div>}
         <div className="ai-chat-toolbar-actions">
@@ -341,7 +371,7 @@ export function AIChat({ global = false, compact = false, home = false }: AIChat
     <div className="ai-thread" ref={threadRef}>
       {compact && messages.length === 0 && providerConnected !== null && <div className="provider-empty">{providerConnected ? `Using ${currentModelLabel}${providerId === 'codex' && codexEffortText ? ` · ${codexEffortText}` : ''}` : 'No API connected'}</div>}
       {messages.length === 0 && !compact && <div className="message assistant"><div className="ai-avatar"><Sparkles size={13} /></div><div>{greeting}</div></div>}
-      {messages.map((message) => <div key={message.id} className={`message ${message.role}`}>{message.role === 'assistant' && !compact && <div className="ai-avatar"><Sparkles size={13} /></div>}<div className="message-body">{message.role === 'assistant' ? <Suspense fallback={null}><AIMessageContent content={message.content} /></Suspense> : message.content}{message.sources && message.sources.length > 0 && <div className="message-sources">Sources: {message.sources.map((source, index) => <a key={`${source.url}:${index}`} href={source.url} target="_blank" rel="noopener noreferrer">{source.title}</a>)}</div>}</div></div>)}
+      {messages.map((message) => <div key={message.id} className={`message ${message.role}`}>{message.role === 'assistant' && !compact && <div className="ai-avatar"><Sparkles size={13} /></div>}<div className="message-body">{message.role === 'assistant' ? <Suspense fallback={null}><AIMessageContent content={message.content} /></Suspense> : <>{message.content}{message.attachments?.length ? <div className="chat-message-attachments">{message.attachments.map((attachment) => <div key={attachment.id}><Paperclip size={13} /><span>{attachment.name}</span>{attachment.images[0] && <img src={attachment.images[0]} alt={attachment.name} />}</div>)}</div> : null}</>}{message.sources && message.sources.length > 0 && <div className="message-sources">Sources: {message.sources.map((source, index) => <a key={`${source.url}:${index}`} href={source.url} target="_blank" rel="noopener noreferrer">{source.title}</a>)}</div>}</div></div>)}
       {thinking && <div className="message assistant">{!compact && <div className="ai-avatar"><Sparkles size={13} /></div>}<div className="typing"><i /><i /><i /></div></div>}
       {error?.threadId === threadId && <div className="ai-error"><Settings size={16} /><span>{error.message}</span>{error.retryContent && !error.settings && <button onClick={() => void send(error.retryContent, true)}>Reintentar</button>}{error.settings && <button onClick={() => state.setActiveView('settings')}>Open settings</button>}{error.quota && <>{compact && <button onClick={() => setModelMenuOpen(true)}>Cambiar modelo</button>}<a href="https://ai.dev/rate-limit" target="_blank" rel="noopener noreferrer">Ver cuota</a></>}</div>}
       {pending.length > 0 && <div className="proposal-queue"><div className="proposal-heading"><span>First proposal</span><span>{pending.length} pending</span></div>
@@ -350,6 +380,9 @@ export function AIChat({ global = false, compact = false, home = false }: AIChat
         </div>{pending.length > 1 && <small>The next proposal appears after this one is reviewed. You can keep asking questions meanwhile.</small>}</div>}
       {global && messages.length === 0 && !compact && <div className="prompt-suggestions"><button onClick={() => void send('When is my next exam?')}><CalendarDays size={15} />When is my next exam?</button><button onClick={() => void send('What did I train last week?')}><Dumbbell size={15} />What did I train last week?</button><button onClick={() => void send('Summarize my recent university notes')}><FileText size={15} />Summarize recent notes</button></div>}
     </div>
-    <div className="ai-composer-wrap">{!global && <div className="ai-context-tag"><span className="ai-context-text" title={textSelection?.text ?? contextLabel}>{contextLabel}</span>{textSelection && <button type="button" className="ai-context-remove" aria-label="Quitar texto seleccionado del contexto" onClick={() => state.setAiTextSelection(null)}><X size={12} /></button>}<button ref={contextHelpRef} type="button" className="ai-context-help" aria-label="Ayuda para seleccionar bloques" aria-expanded={contextTipOpen} onClick={() => setContextTipOpen((open) => !open)} onBlur={() => setContextTipOpen(false)}><Lightbulb size={12} /></button><span className={`ai-context-tip ${contextTipOpen ? 'open' : ''}`} role="tooltip">Mayús + clic para seleccionar bloques</span></div>}<div className="ai-composer"><textarea ref={inputRef} rows={1} placeholder={global ? 'Ask anything or capture an update…' : 'Ask about this project…'} onInput={resizeComposer} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send(); } }} /><div className="composer-actions"><button className="send-button" onClick={() => void send()} aria-label="Send"><ArrowUp size={17} /></button></div></div></div>
+    <div className="ai-composer-wrap">
+      <input ref={attachmentInputRef} type="file" multiple accept={ATTACHMENT_ACCEPT} hidden aria-label="Archivos para el chat" onChange={(event) => { void attachFiles(Array.from(event.currentTarget.files ?? [])); event.currentTarget.value = ''; }} />
+      {(draftAttachments.length > 0 || preparing || attachmentError) && <div className="chat-attachment-drafts">{draftAttachments.map((attachment) => <div className="chat-attachment-chip" key={attachment.id}>{attachment.images[0] ? <img src={attachment.images[0]} alt="" /> : <FileText size={15} />}<span title={attachment.name}>{attachment.name}</span><button type="button" aria-label={`Quitar ${attachment.name}`} disabled={preparing} onClick={() => setAttachments((current) => ({ ...current, [draftKey]: (current[draftKey] ?? []).filter((item) => item.id !== attachment.id) }))}><X size={13} /></button></div>)}{preparing && <small role="status">Preparando archivos…</small>}{attachmentError && <small role="alert">{attachmentError}</small>}</div>}
+      {!global && <div className="ai-context-tag"><span className="ai-context-text" title={textSelection?.text ?? contextLabel}>{contextLabel}</span>{textSelection && <button type="button" className="ai-context-remove" aria-label="Quitar texto seleccionado del contexto" onClick={() => state.setAiTextSelection(null)}><X size={12} /></button>}<button ref={contextHelpRef} type="button" className="ai-context-help" aria-label="Ayuda para seleccionar bloques" aria-expanded={contextTipOpen} onClick={() => setContextTipOpen((open) => !open)} onBlur={() => setContextTipOpen(false)}><Lightbulb size={12} /></button><span className={`ai-context-tip ${contextTipOpen ? 'open' : ''}`} role="tooltip">Mayús + clic para seleccionar bloques</span></div>}<div className="ai-composer"><textarea ref={inputRef} rows={1} placeholder={global ? 'Ask anything or capture an update…' : 'Ask about this project…'} onPaste={(event) => { const files = Array.from(event.clipboardData.files); if (files.length) { event.preventDefault(); void attachFiles(files); } }} onInput={resizeComposer} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send(); } }} /><div className="composer-actions"><button type="button" aria-label="Adjuntar archivos" title="Adjuntar imágenes, PDF, documentos o texto" disabled={preparing || thinking} onClick={() => attachmentInputRef.current?.click()}><Paperclip size={17} /></button><button disabled={preparing || thinking} className="send-button" onClick={() => void send()} aria-label="Send"><ArrowUp size={17} /></button></div></div></div>
   </div>;
 }

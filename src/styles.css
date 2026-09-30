@@ -857,3 +857,15 @@ html:has(.home-layout), body:has(.home-layout),
   .home-calendar .day-heading { gap: 1px; }
   .home-calendar .day-heading strong { width: 20px; height: 20px; flex-shrink: 0; font-size: 11px; }
 }
+.chat-attachment-drafts { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 12px 7px; min-width: 0; }
+.chat-attachment-drafts > small { width: 100%; font-size: 11px; color: var(--muted); }
+.chat-attachment-drafts > small[role='alert'] { color: #a55b5b; }
+.chat-attachment-chip { display: flex; align-items: center; gap: 5px; max-width: 100%; min-width: 0; padding: 5px 7px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel-raised); color: var(--text-soft); font-size: 11px; }
+.chat-attachment-chip img { width: 28px; height: 28px; object-fit: cover; border-radius: 3px; }
+.chat-attachment-chip span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-attachment-chip button { display: grid; place-items: center; flex: none; border: 0; padding: 3px; background: transparent; color: var(--muted); cursor: pointer; }
+.chat-message-attachments { margin-top: 7px; display: grid; gap: 6px; }
+.chat-message-attachments > div { min-width: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 5px; font-size: 11px; }
+.chat-message-attachments span { overflow-wrap: anywhere; }
+.chat-message-attachments img { display: block; width: 100%; max-height: 200px; object-fit: contain; border-radius: 6px; }
+.composer-actions button:disabled { opacity: .5; cursor: default; }
