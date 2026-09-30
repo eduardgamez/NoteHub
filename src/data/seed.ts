@@ -1,12 +1,5 @@
 import type { WorkspaceStateData } from '../types';
 
-const weeksAgo = (weeks: number) => {
-  const date = new Date();
-  date.setDate(date.getDate() - weeks * 7);
-  date.setHours(18, 0, 0, 0);
-  return date.toISOString();
-};
-
 export const seedWorkspace: WorkspaceStateData = {
   version: 2,
   activeNoteId: 'sensitivity',
@@ -81,22 +74,8 @@ export const seedWorkspace: WorkspaceStateData = {
     { id: 'lateral-raise', name: 'Lateral raise', category: 'Shoulders', equipment: 'Dumbbells' },
     { id: 'calf-raise', name: 'Standing calf raise', category: 'Calves', equipment: 'Machine' },
   ],
-  routines: [{ id: 'upper-a', name: 'Upper A', exercises: [
-    { exerciseId: 'incline-db', targetSets: 3, repRange: '6–10' },
-    { exerciseId: 'chest-row', targetSets: 3, repRange: '8–12' },
-    { exerciseId: 'lateral-raise', targetSets: 4, repRange: '10–15' },
-  ] }],
-  workouts: Array.from({ length: 8 }, (_, index) => ({
-    id: `workout-${index}`, routineId: 'upper-a', title: 'Upper A', startedAt: weeksAgo(7 - index), endedAt: weeksAgo(7 - index),
-    exercises: [
-      { exerciseId: 'incline-db', sets: [
-        { id: `incline-${index}-1`, reps: 8, weight: 24 + index, rir: 2, completed: true },
-        { id: `incline-${index}-2`, reps: 9, weight: 22 + index, rir: 1, completed: true },
-      ] },
-      { exerciseId: 'chest-row', sets: [{ id: `row-${index}`, reps: 10, weight: 45 + index * 2, rir: 2, completed: true }] },
-      { exerciseId: 'calf-raise', sets: [{ id: `calf-${index}`, reps: 12, weight: 50 + index * 2, rir: 2, completed: true }] },
-    ],
-  })),
+  routines: [],
+  workouts: [],
   chatThreads: {},
   chatSessions: {},
   activeChatIds: {},

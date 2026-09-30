@@ -1,3 +1,4 @@
+import { isDemoRoutine, isDemoWorkout } from '../gym/demoData';
 import { deletionSnapshotMatches, deletionSnapshotHasId } from '../ai/deletionProposal';
 import { create } from 'zustand';
 import { seedWorkspace } from '../data/seed';
@@ -187,8 +188,8 @@ function migrate(stored: Partial<WorkspaceStateData>): WorkspaceStateData {
     tasks: (stored.tasks ?? seedWorkspace.tasks).filter((task) => !demoTaskIds.has(task.id)),
     reminderTemplates: (stored.reminderTemplates ?? seedWorkspace.reminderTemplates).filter((template) => !demoTemplateIds.has(template.id)),
     exercises: stored.exercises ?? seedWorkspace.exercises,
-    routines: stored.routines ?? seedWorkspace.routines,
-    workouts: stored.workouts ?? seedWorkspace.workouts,
+    routines: (stored.routines ?? seedWorkspace.routines).filter((routine) => !isDemoRoutine(routine)),
+    workouts: (stored.workouts ?? seedWorkspace.workouts).filter((workout) => !isDemoWorkout(workout)),
     chatThreads,
     chatSessions,
     activeChatIds,
@@ -643,7 +644,8 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
       const source = stored ?? remote;
       const hadDemoItems = Boolean(source?.calendarEvents?.some((event) => demoEventIds.has(event.id))
         || source?.tasks?.some((task) => demoTaskIds.has(task.id))
-        || source?.reminderTemplates?.some((template) => demoTemplateIds.has(template.id)));
+        || source?.reminderTemplates?.some((template) => demoTemplateIds.has(template.id))
+        || source?.routines?.some(isDemoRoutine) || source?.workouts?.some(isDemoWorkout));
       if (!remote || keepLocal || hadDemoItems) persist(get());
     } catch { set({ hydrated: true }); }
   },
@@ -697,10 +699,10 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
     if (operation.kind === 'event.remove') set((state) => ({ calendarEvents: state.calendarEvents.filter((event) => event.id !== operation.eventId) }));
     if (operation.kind === 'task.upsert' && !demoTaskIds.has(operation.task.id)) set((state) => ({ tasks: state.tasks.some((item) => item.id === operation.task.id) ? state.tasks.map((item) => item.id === operation.task.id ? operation.task : item) : [...state.tasks, operation.task] }));
     if (operation.kind === 'task.remove') set((state) => ({ tasks: state.tasks.filter((item) => item.id !== operation.taskId) }));
-    if (operation.kind === 'routine.upsert') set((state) => ({ routines: state.routines.some((item) => item.id === operation.routine.id) ? state.routines.map((item) => item.id === operation.routine.id ? operation.routine : item) : [...state.routines, operation.routine] }));
+    if (operation.kind === 'routine.upsert' && !isDemoRoutine(operation.routine)) set((state) => ({ routines: state.routines.some((item) => item.id === operation.routine.id) ? state.routines.map((item) => item.id === operation.routine.id ? operation.routine : item) : [...state.routines, operation.routine] }));
     if (operation.kind === 'routine.remove') set((state) => ({ routines: state.routines.filter((item) => item.id !== operation.routineId) }));
     if (operation.kind === 'workout.remove') set((state) => ({ workouts: state.workouts.filter((item) => item.id !== operation.workoutId) }));
-    if (operation.kind === 'workout.upsert') set((state) => ({ workouts: state.workouts.some((item) => item.id === operation.workout.id) ? state.workouts.map((item) => item.id === operation.workout.id ? operation.workout : item) : [...state.workouts, operation.workout] }));
+    if (operation.kind === 'workout.upsert' && !isDemoWorkout(operation.workout)) set((state) => ({ workouts: state.workouts.some((item) => item.id === operation.workout.id) ? state.workouts.map((item) => item.id === operation.workout.id ? operation.workout : item) : [...state.workouts, operation.workout] }));
     if (operation.kind === 'exercise.upsert') set((state) => ({ exercises: state.exercises.some((item) => item.id === operation.exercise.id) ? state.exercises.map((item) => item.id === operation.exercise.id ? operation.exercise : item) : [...state.exercises, operation.exercise] }));
     if (operation.kind === 'chat.session.upsert') set((state) => ({ chatSessions: { ...state.chatSessions, [operation.session.id]: operation.session } }));
     if (operation.kind === 'chat.session.remove') set((state) => {

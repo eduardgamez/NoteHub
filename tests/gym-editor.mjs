@@ -13,7 +13,8 @@ try {
  await page.getByRole('heading', { name: 'Gimnasio', exact: true }).waitFor();
  await page.screenshot({ path: '/tmp/notehub-gym-desktop.png' });
  assert.equal(await page.locator('.gym-tabs').count(), 0);
- assert.ok(await page.getByRole('button', { name: /^Empezar rutina/ }).count());
+ assert.equal(await page.getByRole('button', { name: /^Empezar rutina/ }).count(), 0);
+ await page.getByText('Crea tu primera rutina o empieza un entrenamiento libre.').waitFor();
  assert.equal(await page.locator('.gym-stats').count(), 0);
  await page.getByRole('button', { name: 'Nueva rutina' }).click();
  const dialog = page.getByRole('dialog', { name: 'Editar rutina' });
