@@ -18,7 +18,7 @@ Project: `gen-lang-client-0437462707` (NoteHub Project). Always specify this pro
 
 After the VM has generated `/var/lib/notehub/credentials/host-id`, complete NoteHub OAuth locally. With the owner's approval, transfer only this app's protected OAuth file via SSH to `/var/lib/notehub/credentials/chatgpt.json`, preserving the VM host ID, owned by notehub with mode 0600. The VM owns all subsequent refreshes. Never transfer the Mac's Codex login, put credentials in GitHub, frontend code, URLs, build logs, or screenshots.
 
-The integration is not verified until an actual authenticated chat response succeeds. Keep the existing public API endpoint until then. The user's ChatGPT plan limits still apply. A small shared server can accommodate light use, but cannot share the owner's personal ChatGPT allowance with other users.
+The VM returned an actual ChatGPT response with gpt-6-sol on 2026-10-01. Its protected OAuth connection is owned by notehub with mode 0600. The public API endpoint is `https://notehub.35.207.0.156.sslip.io`. The address is ephemeral: stopping and restarting the VM may change it; do not stop it without updating DNS/API settings. The user's ChatGPT plan limits still apply. A small shared server can accommodate light use, but cannot share the owner's personal ChatGPT allowance with other users.
 
 Official references:
 

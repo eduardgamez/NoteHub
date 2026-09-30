@@ -24,7 +24,14 @@ export function nativeItems(tasks: Task[], events: CalendarEvent[]): NativeItem[
   ].filter((item) => Number.isFinite(item.due));
 }
 export function apiUrl(path: string): string {
-  const origin = localStorage.getItem('notehub-api-origin') ?? import.meta.env.VITE_API_ORIGIN;
+  let savedOrigin = localStorage.getItem('notehub-api-origin');
+  const configuredOrigin = import.meta.env.VITE_API_ORIGIN;
+  // Migrate this app's previous deployment while preserving custom servers.
+  if (savedOrigin?.replace(/\/$/, '') === 'https://notehub-ai-tcu9.onrender.com' && configuredOrigin && configuredOrigin !== savedOrigin) {
+    savedOrigin = configuredOrigin;
+    localStorage.setItem('notehub-api-origin', configuredOrigin);
+  }
+  const origin = savedOrigin ?? configuredOrigin;
   if (!origin) {
     if (isNativeIOS() || window.location.hostname.endsWith('.github.io')) throw new Error('Configura el Servidor de IA en Ajustes con una dirección HTTPS. La web publicada necesita un servidor de IA accesible.');
     return path;

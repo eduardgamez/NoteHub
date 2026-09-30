@@ -103,7 +103,7 @@ export async function getCodexLoginStatus(): Promise<CodexLoginState> {
 
 export function getActiveProvider(): ProviderId {
   const saved = localStorage.getItem('notehub-ai-provider');
-  return saved === 'anthropic' || saved === 'gemini' || saved === 'codex' ? saved : 'openai';
+  return saved === 'openai' || saved === 'anthropic' || saved === 'gemini' || saved === 'codex' ? saved : 'codex';
 }
 
 export function setActiveProvider(provider: ProviderId) { localStorage.setItem('notehub-ai-provider', provider); }

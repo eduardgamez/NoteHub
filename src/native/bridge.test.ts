@@ -13,3 +13,9 @@ it('retains the local development proxy when no server is configured', () => {
   vi.stubEnv('VITE_API_ORIGIN', '');
   expect(apiUrl('/api/ai/status')).toBe('/api/ai/status');
 });
+it('moves the old NoteHub deployment to the configured replacement', () => {
+  localStorage.setItem('notehub-api-origin', 'https://notehub-ai-tcu9.onrender.com/');
+  vi.stubEnv('VITE_API_ORIGIN', 'https://replacement.example.com');
+  expect(apiUrl('/api/ai/complete')).toBe('https://replacement.example.com/api/ai/complete');
+  expect(localStorage.getItem('notehub-api-origin')).toBe('https://replacement.example.com');
+});
