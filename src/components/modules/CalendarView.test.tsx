@@ -45,13 +45,16 @@ describe('event task lists', () => {
     expect(useWorkspace.getState().calendarEvents[0]).toEqual(expect.objectContaining({ title: 'Updated session', checklist: [{ id: 'item', text: 'Bring book', done: true }] }));
   });
 
-  it('creates events with optional tasks, ignoring blank lines', () => {
+  it('creates events with inline tasks, ignoring empty items', () => {
     render(<CalendarView />);
     fireEvent.click(screen.getByRole('button', { name: /^Create$/ }));
     const dialog = screen.getByRole('dialog', { name: 'Create calendar item' });
-    fireEvent.change(within(dialog).getByLabelText('Title'), { target: { value: 'New event' } });
-    fireEvent.change(within(dialog).getByLabelText('Tasks (one per line)'), { target: { value: 'First task\n\n Second task ' } });
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Create event' }));
+    fireEvent.change(within(dialog).getByLabelText('Título'), { target: { value: 'New event' } });
+    for (const text of ['First task', ' ', ' Second task ']) {
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Añadir tarea' }));
+      fireEvent.change(within(dialog).getAllByPlaceholderText('Tarea').at(-1)!, { target: { value: text } });
+    }
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Crear evento' }));
     expect(useWorkspace.getState().calendarEvents.at(-1)?.checklist?.map((item) => [item.text, item.done])).toEqual([['First task', false], ['Second task', false]]);
   });
 });
@@ -138,4 +141,24 @@ it('edits event start and end as separate dates and mandatory times', () => {
   expect(new Date(event.start).getMinutes()).toBe(15);
   expect(new Date(event.end).getHours()).toBe(12);
   expect(new Date(event.end).getMinutes()).toBe(45);
+});
+
+
+it('creates an all-day reminder from a template with editable and reorderable tasks', () => {
+  useWorkspace.setState({ reminderTemplates: [{ id: 'template', title: 'Gastos', items: ['Revisar', 'Separar'] }] });
+  render(<CalendarView />);
+  fireEvent.click(screen.getByRole('button', { name: /^Create$/ }));
+  const dialog = screen.getByRole('dialog', { name: 'Create calendar item' });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Recordatorio' }));
+  fireEvent.change(within(dialog).getByLabelText('Plantilla'), { target: { value: 'template' } });
+  expect(within(dialog).getByLabelText('Título')).toHaveValue('Gastos');
+  fireEvent.change(within(dialog).getByDisplayValue('Revisar'), { target: { value: 'Revisar recibos' } });
+  fireEvent.keyDown(within(dialog).getByRole('button', { name: 'Mover tarea Revisar recibos' }), { key: 'ArrowDown' });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Quitar hora' }));
+  expect(within(dialog).getByLabelText('Hora de momento')).toBeDisabled();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Crear recordatorio' }));
+  const task = useWorkspace.getState().tasks.at(-1)!;
+  expect(task.due).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  expect(task.checklist.map((item) => item.text)).toEqual(['Separar', 'Revisar recibos']);
+  expect(task.done).toBe(false);
 });

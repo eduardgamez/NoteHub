@@ -928,3 +928,8 @@ html:has(.home-layout), body:has(.home-layout),
 .reminder-task-drag:active { cursor: grabbing; }
 .reminder-editor-task.dragging { background: var(--hover); border-radius: 4px; }
 .event-editor .reminder-moment > span { min-width: 34px; }
+
+.reminder-popover.calendar-creation { position: relative; z-index: auto; }
+.calendar-creation .create-kind { align-self: flex-start; }
+.calendar-creation .calendar-template { display: flex; flex-direction: row; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; }
+.calendar-template select { flex: 1; min-width: 0; height: 32px; padding: 0 7px; border: 1px solid var(--line); border-radius: 5px; background: var(--input); color: var(--text); font-size: 11px; }

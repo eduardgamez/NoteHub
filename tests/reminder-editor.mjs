@@ -85,5 +85,22 @@ try {
  await eventDialog.getByRole('button', { name: 'Save', exact: true }).click();
  const savedEvent = await page.evaluate(async () => (await import('/src/store/useWorkspace.ts')).useWorkspace.getState().calendarEvents[0]);
  assert.equal(new Date(savedEvent.end).getUTCMinutes(), 45);
+ await page.getByRole('button', { name: 'Create', exact: true }).click();
+ const creation = page.getByRole('dialog', { name: 'Create calendar item' });
+ await creation.getByLabel('Título', { exact: true }).fill('Nuevo evento');
+ const creationBox = await creation.boundingBox();
+ assert.ok(creationBox.x >= 12 && creationBox.x + creationBox.width <= 363);
+ const creationSize = await creation.evaluate((element) => ({ height: element.clientHeight, content: element.scrollHeight }));
+ assert.ok(creationSize.content <= creationSize.height + 1);
+ await creation.screenshot({ path: '/tmp/notehub-create-event-mobile.png' });
+ await creation.getByRole('button', { name: 'Recordatorio', exact: true }).click();
+ await creation.getByRole('button', { name: 'Añadir tarea' }).click();
+ await creation.getByPlaceholder('Tarea', { exact: true }).fill('Primera tarea');
+ await creation.getByRole('button', { name: 'Quitar hora' }).click();
+ await creation.screenshot({ path: '/tmp/notehub-create-reminder-mobile.png' });
+ await creation.getByRole('button', { name: 'Crear recordatorio' }).click();
+ const createdTask = await page.evaluate(async () => (await import('/src/store/useWorkspace.ts')).useWorkspace.getState().tasks.at(-1));
+ assert.match(createdTask.due, /^\d{4}-\d{2}-\d{2}$/);
+ assert.equal(createdTask.checklist[0].text, 'Primera tarea');
  console.log('Editors passed: pointer reorder and persistence, natural height, large-list scrolling, event dates and mobile fit.');
 } finally { await browser?.close(); server.kill('SIGTERM'); }

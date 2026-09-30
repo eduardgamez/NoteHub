@@ -43,7 +43,8 @@ export function CalendarView() {
   const [selectedTask, setSelectedTask] = useState<PopoverPosition | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<PopoverPosition | null>(null);
   const [eventDraft, setEventDraft] = useState({ title: '', start: '', end: '', checklist: [] as ChecklistEntry[] });
-  const [creationTasks, setCreationTasks] = useState('');
+  const [creationTasks, setCreationTasks] = useState<ChecklistEntry[]>([]);
+  const [creationAllDay, setCreationAllDay] = useState(false);
   const [hoveredReminder, setHoveredReminder] = useState<{ title: string; x: number; y: number; side: 'left' | 'right' } | null>(null);
   const taskPopoverRef = useRef<HTMLFormElement>(null);
   const [reminderDraft, setReminderDraft] = useState({ title: '', date: '', time: '09:00', allDay: false, checklist: [] as ChecklistEntry[] });
@@ -71,6 +72,13 @@ export function CalendarView() {
     document.addEventListener('pointerdown', closeOutside, true);
     return () => { window.removeEventListener('keydown', close); document.removeEventListener('pointerdown', closeOutside, true); };
   }, [selectedTask, selectedEvent]);
+
+  useEffect(() => {
+    if (!creating) return;
+    const close = (event: KeyboardEvent) => { if (event.key === 'Escape') setCreating(false); };
+    window.addEventListener('keydown', close);
+    return () => window.removeEventListener('keydown', close);
+  }, [creating]);
 
   useLayoutEffect(() => {
     const position = selectedTask ?? selectedEvent;
@@ -137,12 +145,13 @@ export function CalendarView() {
     if (!draft.title.trim() || !draft.start) return;
     if (creationKind === 'event') {
       if (!draft.end || new Date(draft.end) <= new Date(draft.start)) return;
-      addEvent({ id: crypto.randomUUID(), title: draft.title.trim(), start: new Date(draft.start).toISOString(), end: new Date(draft.end).toISOString(), color: 'green', checklist: creationTasks.split('\n').map((text) => text.trim()).filter(Boolean).map((text) => ({ id: crypto.randomUUID(), text, done: false })) });
+      addEvent({ id: crypto.randomUUID(), title: draft.title.trim(), start: new Date(draft.start).toISOString(), end: new Date(draft.end).toISOString(), color: 'green', checklist: creationTasks.map((item) => ({ ...item, text: item.text.trim() })).filter((item) => item.text) });
     } else {
-      const template = templates.find((item) => item.id === templateId);
-      addTask({ id: crypto.randomUUID(), title: draft.title.trim(), done: false, reminder: true, due: new Date(draft.start).toISOString(), checklist: template?.items.map((text) => ({ id: crypto.randomUUID(), text, done: false })) ?? [] });
+      const due = creationAllDay ? draft.start.slice(0, 10) : new Date(draft.start).toISOString();
+      const task: Task = { id: crypto.randomUUID(), title: draft.title.trim(), done: false, reminder: true, due, checklist: creationTasks.map((item) => ({ ...item, text: item.text.trim() })).filter((item) => item.text) };
+      addTask({ ...task, done: reminderDone(task) });
     }
-    setCreating(false); setCreationTasks(''); setTemplateId(''); setDraft({ ...draft, title: '' });
+    setCreating(false); setCreationTasks([]); setCreationAllDay(false); setTemplateId(''); setDraft({ ...draft, title: '' });
   }
 
   return <div className="module-view calendar-view">
@@ -151,7 +160,7 @@ export function CalendarView() {
       <div className="module-actions">
         <div className="segmented">{(['day', 'week', 'month'] as CalendarMode[]).map((item) => <button key={item} className={mode === item ? 'active' : ''} onClick={() => setMode(item)}>{item}</button>)}</div>
         <button className="icon-button" onClick={() => move(-1)}><ChevronLeft size={16} /></button><button className="icon-button" onClick={() => move(1)}><ChevronRight size={16} /></button>
-        <button className="icon-button calendar-create" aria-label="Create" title="Create event or reminder" onClick={() => setCreating(true)}><Plus size={17} /></button>
+        <button className="icon-button calendar-create" aria-label="Create" title="Create event or reminder" onClick={() => { setSelectedTask(null); setSelectedEvent(null); setCreating(true); }}><Plus size={17} /></button>
       </div>
     </div>
 
@@ -197,14 +206,17 @@ export function CalendarView() {
       <div className="reminder-editor-footer"><span className="reminder-auto-status">{reminderDone(activeTask, now) ? 'Done' : ''}</span><button type="button" className="reminder-delete" aria-label="Delete reminder" onClick={() => { removeTask(activeTask.id); setSelectedTask(null); }}><Trash2 size={16} /></button><button type="submit" className="reminder-save">Save</button></div>
     </form>}
 
-    {creating && <div className="modal-backdrop" onMouseDown={() => setCreating(false)}><form className="editor-modal" role="dialog" aria-label="Create calendar item" onSubmit={createItem} onMouseDown={(event) => event.stopPropagation()}>
-      <div className="modal-header"><div><p className="eyebrow">CALENDAR</p><h2>Create</h2></div><button type="button" className="icon-button" onClick={() => setCreating(false)}><X size={17} /></button></div>
-      <div className="segmented create-kind"><button type="button" className={creationKind === 'event' ? 'active' : ''} onClick={() => setCreationKind('event')}>Event</button><button type="button" className={creationKind === 'reminder' ? 'active' : ''} onClick={() => setCreationKind('reminder')}>Reminder</button></div>
-      <label>Title<input autoFocus value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} placeholder="What are you planning?" /></label>
-      <label>{creationKind === 'event' ? 'Starts' : 'When'}<input type="datetime-local" value={draft.start} onChange={(event) => setDraft({ ...draft, start: event.target.value })} required /></label>
-      {creationKind === 'event' ? <label>Ends<input type="datetime-local" value={draft.end} min={draft.start} onChange={(event) => setDraft({ ...draft, end: event.target.value })} required /></label> : <label>Checklist template<select value={templateId} onChange={(event) => { const next = event.target.value; setTemplateId(next); const template = templates.find((item) => item.id === next); if (template) setDraft({ ...draft, title: template.title }); }}><option value="">None</option>{templates.map((template) => <option key={template.id} value={template.id}>{template.title}</option>)}</select></label>}
-      {creationKind === 'event' && <label>Tasks (one per line)<textarea value={creationTasks} onChange={(event) => setCreationTasks(event.target.value)} placeholder="Optional tasks" rows={3} /></label>}
-      <button className="primary-button" type="submit">Create {creationKind}</button>
+    {creating && <div className="modal-backdrop" onMouseDown={() => setCreating(false)}><form className={`reminder-popover reminder-editor calendar-creation ${creationKind === 'event' ? 'event-editor' : ''}`} role="dialog" aria-label="Create calendar item" onSubmit={createItem} onMouseDown={(event) => event.stopPropagation()}>
+      <div className="segmented create-kind"><button type="button" className={creationKind === 'event' ? 'active' : ''} onClick={() => setCreationKind('event')}>Evento</button><button type="button" className={creationKind === 'reminder' ? 'active' : ''} onClick={() => setCreationKind('reminder')}>Recordatorio</button></div>
+      <div className="reminder-title-line"><strong>{creationKind === 'event' ? 'Evento' : 'Recordatorio'} ·</strong><textarea aria-label="Título" autoFocus value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} placeholder="Título" rows={1} ref={(element) => { if (element) { element.style.height = 'auto'; element.style.height = `${element.scrollHeight}px`; } }} required /><button type="button" className="reminder-close" aria-label="Cerrar creación" onClick={() => setCreating(false)}><X size={14} /></button></div>
+      {(creationKind === 'event' ? ['start', 'end'] as const : ['start'] as const).map((field) => {
+        const label = creationKind === 'reminder' ? 'momento' : field === 'start' ? 'inicio' : 'fin';
+        const withoutTime = creationKind === 'reminder' && creationAllDay;
+        return <div className="reminder-moment" key={field}><span>{label === 'momento' ? 'Momento' : label === 'inicio' ? 'Inicio' : 'Fin'}</span><input aria-label={`Día de ${label}`} type="date" value={draft[field].slice(0, 10)} onChange={(event) => setDraft({ ...draft, [field]: `${event.target.value}T${draft[field].slice(11, 16)}` })} required /><div className={`reminder-time-field ${withoutTime ? 'without-time' : ''}`}><input aria-label={`Hora de ${label}`} type={withoutTime ? 'text' : 'time'} value={draft[field].slice(11, 16)} disabled={withoutTime} onChange={(event) => setDraft({ ...draft, [field]: `${draft[field].slice(0, 10)}T${event.target.value}` })} required={!withoutTime} /></div>{creationKind === 'reminder' && <button type="button" className={`reminder-time-toggle ${withoutTime ? 'off' : ''}`} aria-label={withoutTime ? 'Activar hora' : 'Quitar hora'} aria-pressed={withoutTime} onClick={() => setCreationAllDay(!creationAllDay)}><X size={15} /></button>}</div>;
+      })}
+      {creationKind === 'reminder' && <label className="calendar-template">Plantilla<select value={templateId} onChange={(event) => { const next = event.target.value; setTemplateId(next); const template = templates.find((item) => item.id === next); if (template) { setDraft({ ...draft, title: template.title }); setCreationTasks(template.items.map((text) => ({ id: crypto.randomUUID(), text, done: false }))); } }}><option value="">Ninguna</option>{templates.map((template) => <option key={template.id} value={template.id}>{template.title}</option>)}</select></label>}
+      <EditableTaskList items={creationTasks} onChange={setCreationTasks} />
+      <div className="reminder-editor-footer"><button className="reminder-save" type="submit">Crear {creationKind === 'event' ? 'evento' : 'recordatorio'}</button></div>
     </form></div>}
   </div>;
 }
