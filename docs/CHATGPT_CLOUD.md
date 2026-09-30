@@ -27,3 +27,9 @@ Official references:
 - https://developers.openai.com/siwc/token-sharing-open-source/codex-app-server
 - https://developers.openai.com/siwc/token-sharing-open-source/profiles-and-sessions
 - https://render.com/docs/disks
+
+## Live validation result (2026-10-01)
+
+The protected VM session completed a short inference successfully. GitHub Pages deployment 36785447220 succeeded, account model discovery worked through the public authenticated broker, and the signed iPhone update was installed and launched. All 120 tests and the signed iOS build passed.
+
+A full chat from the published web then failed with: “The ChatGPT user has reached their Subscription Sharing usage limit.” This is a ChatGPT plan-sharing limit, potentially app-specific, and not evidence that the entire ChatGPT/Codex plan is exhausted. Pause inference probes; do not loop through OAuth or switch to paid API billing. Check ChatGPT Settings → Usage before resuming. The error does not disclose a reset time. This deployment is connected, but a complete web chat remains blocked on that external quota.
