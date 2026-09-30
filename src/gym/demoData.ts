@@ -1,10 +1,5 @@
 import type { Routine, Workout } from '../types';
-// Recognize the exact old fixtures only; edited or genuinely created sessions are preserved.
-const demoRoutine: Routine = { id: 'upper-a', name: 'Upper A', exercises: [
-    { exerciseId: 'incline-db', targetSets: 3, repRange: '6–10' },
-    { exerciseId: 'chest-row', targetSets: 3, repRange: '8–12' },
-    { exerciseId: 'lateral-raise', targetSets: 4, repRange: '10–15' },
-  ] };
+// The original Upper A routine was explicitly removed, including edited copies of that ID.
 const demoWorkouts: Workout[] = Array.from({ length: 8 }, (_, index) => ({
     id: `workout-${index}`, routineId: 'upper-a', title: 'Upper A', startedAt: '', endedAt: '',
     exercises: [
@@ -17,5 +12,5 @@ const demoWorkouts: Workout[] = Array.from({ length: 8 }, (_, index) => ({
     ],
   }));
 const withoutDates = (workout: Workout) => JSON.stringify(workout, (key, value) => key === 'startedAt' || key === 'endedAt' ? undefined : value);
-export const isDemoRoutine = (routine: Routine) => JSON.stringify(routine) === JSON.stringify(demoRoutine);
+export const isDemoRoutine = (routine: Routine) => routine.id === 'upper-a';
 export const isDemoWorkout = (workout: Workout) => workout.startedAt === workout.endedAt && demoWorkouts.some((demo) => withoutDates(workout) === withoutDates(demo));

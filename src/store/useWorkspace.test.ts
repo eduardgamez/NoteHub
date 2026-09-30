@@ -28,7 +28,7 @@ describe('workspace hydration across devices', () => {
     expect(useWorkspace.getState().routines.map((item) => item.id)).toEqual(['mine']);
     expect(useWorkspace.getState().workouts.map((item) => item.id)).toEqual(['my-session']);
     useWorkspace.getState().applyRemote({ kind: 'routine.upsert', routine: { ...demoRoutine, name: 'Mi rutina editada' }, opId: 'edited-demo-routine', source: 'remote', timestamp: 2 });
-    expect(useWorkspace.getState().routines.at(-1)?.name).toBe('Mi rutina editada');
+    expect(useWorkspace.getState().routines.map((item) => item.id)).toEqual(['mine']);
     useWorkspace.getState().applyRemote({ kind: 'workout.upsert', workout: { ...demoWorkout, endedAt: '2026-01-01T19:00:00Z' }, opId: 'edited-demo-workout', source: 'remote', timestamp: 2 });
     expect(useWorkspace.getState().workouts.at(-1)?.endedAt).toBe('2026-01-01T19:00:00Z');
   });
