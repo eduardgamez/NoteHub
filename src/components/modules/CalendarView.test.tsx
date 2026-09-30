@@ -19,13 +19,16 @@ describe('event task lists', () => {
     render(<CalendarView />);
     fireEvent.click(screen.getByRole('button', { name: 'Event: Study session' }));
     const dialog = screen.getByRole('dialog', { name: 'Manage event' });
-    fireEvent.change(within(dialog).getByLabelText('New event task'), { target: { value: 'Prepare notes' } });
-    fireEvent.click(within(dialog).getByLabelText('Add event task'));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Añadir tarea' }));
+    fireEvent.change(within(dialog).getByPlaceholderText('Tarea'), { target: { value: 'Prepare notes' } });
     fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Prepare notes' }));
     expect(within(dialog).getByRole('checkbox', { name: 'Prepare notes' })).toHaveAttribute('aria-checked', 'true');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
     expect(useWorkspace.getState().calendarEvents[0].checklist?.[0].done).toBe(true);
     expect(syncEngine.publish).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'event.upsert', event: expect.objectContaining({ checklist: [expect.objectContaining({ text: 'Prepare notes', done: true })] }) }));
-    fireEvent.click(within(dialog).getByLabelText('Remove Prepare notes'));
+    fireEvent.click(screen.getByRole('button', { name: 'Event: Study session' }));
+    fireEvent.click(screen.getByLabelText('Eliminar tarea Prepare notes'));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(useWorkspace.getState().calendarEvents[0].checklist).toEqual([]);
   });
 
@@ -37,7 +40,7 @@ describe('event task lists', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Event: Study session' }));
     const dialog = screen.getByRole('dialog', { name: 'Manage event' });
     expect(within(dialog).getByRole('checkbox', { name: 'Bring book' })).toHaveAttribute('aria-checked', 'true');
-    fireEvent.change(within(dialog).getByLabelText('Title'), { target: { value: 'Updated session' } });
+    fireEvent.change(within(dialog).getByLabelText('Título del evento'), { target: { value: 'Updated session' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
     expect(useWorkspace.getState().calendarEvents[0]).toEqual(expect.objectContaining({ title: 'Updated session', checklist: [{ id: 'item', text: 'Bring book', done: true }] }));
   });
@@ -105,4 +108,34 @@ describe('inline reminder editor', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Delete reminder' }));
     expect(useWorkspace.getState().tasks).toHaveLength(0);
   });
+});
+
+
+it('reorders reminder tasks with the keyboard, preserving completion and saving the order', () => {
+  const due = new Date(); due.setHours(18, 30, 0, 0);
+  useWorkspace.setState({ tasks: [{ id: 'ordered', title: 'Orden', reminder: true, done: false, due: due.toISOString(), checklist: [{ id: 'a', text: 'Primera', done: true }, { id: 'b', text: 'Segunda', done: false }] }] });
+  render(<CalendarView />);
+  fireEvent.click(screen.getByRole('button', { name: 'Reminder: Orden' }));
+  fireEvent.keyDown(screen.getByRole('button', { name: 'Mover tarea Primera' }), { key: 'ArrowDown' });
+  expect(screen.getAllByPlaceholderText('Tarea').map((input) => (input as HTMLInputElement).value)).toEqual(['Segunda', 'Primera']);
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(useWorkspace.getState().tasks[0].checklist).toEqual([{ id: 'b', text: 'Segunda', done: false }, { id: 'a', text: 'Primera', done: true }]);
+});
+
+it('edits event start and end as separate dates and mandatory times', () => {
+  render(<CalendarView />);
+  fireEvent.click(screen.getByRole('button', { name: 'Event: Study session' }));
+  const dialog = screen.getByRole('dialog', { name: 'Manage event' });
+  expect(within(dialog).queryByRole('button', { name: 'Quitar hora' })).toBeNull();
+  expect(within(dialog).getByLabelText('Día de inicio')).toBeRequired();
+  expect(within(dialog).getByLabelText('Hora de inicio')).toBeRequired();
+  expect(within(dialog).getByLabelText('Día de fin')).toBeRequired();
+  expect(within(dialog).getByLabelText('Hora de fin')).toBeRequired();
+  fireEvent.change(within(dialog).getByLabelText('Hora de inicio'), { target: { value: '10:15' } });
+  fireEvent.change(within(dialog).getByLabelText('Hora de fin'), { target: { value: '12:45' } });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+  const event = useWorkspace.getState().calendarEvents[0];
+  expect(new Date(event.start).getMinutes()).toBe(15);
+  expect(new Date(event.end).getHours()).toBe(12);
+  expect(new Date(event.end).getMinutes()).toBe(45);
 });

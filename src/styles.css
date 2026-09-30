@@ -922,3 +922,9 @@ html:has(.home-layout), body:has(.home-layout),
 .reminder-time-field { position: relative; flex: 1; min-width: 0; }
 .reminder-editor .reminder-time-field input { width: 100%; }
 .reminder-time-field.without-time::after { content: ''; position: absolute; left: 7px; right: 10px; top: 50%; height: 1px; background: var(--muted); opacity: .55; pointer-events: none; }
+.reminder-popover { max-height: 82dvh; }
+.reminder-popover > * { flex-shrink: 0; }
+.reminder-task-drag { flex: none; display: grid; place-items: center; width: 12px; height: 25px; padding: 0; border: 0; background: transparent; color: var(--faint); cursor: grab; touch-action: none; }
+.reminder-task-drag:active { cursor: grabbing; }
+.reminder-editor-task.dragging { background: var(--hover); border-radius: 4px; }
+.event-editor .reminder-moment > span { min-width: 34px; }

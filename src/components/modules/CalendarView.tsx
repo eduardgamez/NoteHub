@@ -1,17 +1,15 @@
+import { EditableTaskList } from './EditableTaskList';
 import { isAllDayReminder, reminderDate, reminderDone } from '../../lib/reminderTime';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Bell, Check, ChevronLeft, ChevronRight, Clock3, Plus, Trash2, X } from 'lucide-react';
 import { useWorkspace } from '../../store/useWorkspace';
 import type { CalendarEvent, ChecklistEntry, Task } from '../../types';
 
-type PopoverPosition = { id: string; x: number; y: number; above: boolean; maxHeight: number };
+type PopoverPosition = { id: string; x: number; y: number; anchorTop: number; maxHeight: number };
 
 function popoverPosition(id: string, element: HTMLElement, width = 300): PopoverPosition {
   const rect = element.getBoundingClientRect();
-  const spaceAbove = Math.max(0, rect.top - 20);
-  const spaceBelow = Math.max(0, window.innerHeight - rect.bottom - 20);
-  const above = spaceBelow < 420 && spaceAbove > spaceBelow;
-  return { id, x: Math.max(12, Math.min(rect.left, window.innerWidth - width - 12)), y: above ? rect.top - 8 : rect.bottom + 8, above, maxHeight: Math.min(420, above ? spaceAbove : spaceBelow) };
+  return { id, x: Math.max(12, Math.min(rect.left, window.innerWidth - width - 12)), y: rect.bottom + 8, anchorTop: rect.top, maxHeight: window.innerHeight * .82 };
 }
 
 type CalendarMode = 'day' | 'week' | 'month';
@@ -44,8 +42,7 @@ export function CalendarView() {
   const [templateId, setTemplateId] = useState('');
   const [selectedTask, setSelectedTask] = useState<PopoverPosition | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<PopoverPosition | null>(null);
-  const [eventDraft, setEventDraft] = useState({ title: '', start: '', end: '' });
-  const [eventChecklistItem, setEventChecklistItem] = useState('');
+  const [eventDraft, setEventDraft] = useState({ title: '', start: '', end: '', checklist: [] as ChecklistEntry[] });
   const [creationTasks, setCreationTasks] = useState('');
   const [hoveredReminder, setHoveredReminder] = useState<{ title: string; x: number; y: number; side: 'left' | 'right' } | null>(null);
   const taskPopoverRef = useRef<HTMLFormElement>(null);
@@ -75,6 +72,27 @@ export function CalendarView() {
     return () => { window.removeEventListener('keydown', close); document.removeEventListener('pointerdown', closeOutside, true); };
   }, [selectedTask, selectedEvent]);
 
+  useLayoutEffect(() => {
+    const position = selectedTask ?? selectedEvent;
+    const form = taskPopoverRef.current;
+    if (!position || !form) return;
+    const place = () => {
+      const heightLimit = window.innerHeight * .82;
+      form.style.maxHeight = `${heightLimit}px`;
+      const height = form.getBoundingClientRect().height;
+      const belowFits = position.y + height <= window.innerHeight - 12;
+      const aboveFits = position.anchorTop - height - 8 >= 12;
+      const preferred = belowFits ? position.y : aboveFits ? position.anchorTop - height - 8 : position.y;
+      form.style.top = `${Math.max(12, Math.min(preferred, window.innerHeight - height - 12))}px`;
+      form.style.left = `${Math.max(12, Math.min(position.x, window.innerWidth - form.getBoundingClientRect().width - 12))}px`;
+    };
+    place();
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(place) : undefined;
+    observer?.observe(form);
+    window.addEventListener('resize', place);
+    return () => { observer?.disconnect(); window.removeEventListener('resize', place); };
+  }, [selectedTask, selectedEvent, reminderDraft.title, reminderDraft.checklist.length, eventDraft.title, eventDraft.checklist.length]);
+
   function openTask(task: Task, element: HTMLElement) {
     setSelectedEvent(null);
     const due = task.due && !Number.isNaN(reminderDate(task.due).getTime()) ? localInputValue(reminderDate(task.due)) : '';
@@ -83,22 +101,16 @@ export function CalendarView() {
   }
 
   function openEvent(event: CalendarEvent, element: HTMLElement) {
-    setSelectedTask(null); setHoveredReminder(null); setEventChecklistItem('');
-    setEventDraft({ title: event.title, start: localInputValue(new Date(event.start)), end: localInputValue(new Date(event.end)) });
-    setSelectedEvent(popoverPosition(event.id, element));
+    setSelectedTask(null); setHoveredReminder(null);
+    setEventDraft({ title: event.title, start: localInputValue(new Date(event.start)), end: localInputValue(new Date(event.end)), checklist: structuredClone(event.checklist ?? []) });
+    setSelectedEvent(popoverPosition(event.id, element, Math.min(360, window.innerWidth - 24)));
   }
 
   function saveEvent(event: React.FormEvent) {
     event.preventDefault();
     if (!activeEvent || !eventDraft.title.trim() || !eventDraft.start || !eventDraft.end || new Date(eventDraft.end) <= new Date(eventDraft.start)) return;
-    updateEvent({ ...activeEvent, title: eventDraft.title.trim(), start: new Date(eventDraft.start).toISOString(), end: new Date(eventDraft.end).toISOString() });
+    updateEvent({ ...activeEvent, title: eventDraft.title.trim(), start: new Date(eventDraft.start).toISOString(), end: new Date(eventDraft.end).toISOString(), checklist: eventDraft.checklist.map((item) => ({ ...item, text: item.text.trim() })).filter((item) => item.text) });
     setSelectedEvent(null);
-  }
-
-  function addEventTask() {
-    if (!activeEvent || !eventChecklistItem.trim()) return;
-    updateEvent({ ...activeEvent, checklist: [...(activeEvent.checklist ?? []), { id: crypto.randomUUID(), text: eventChecklistItem.trim(), done: false }] });
-    setEventChecklistItem('');
   }
 
   function showReminderTooltip(task: Task, element: HTMLElement) {
@@ -114,14 +126,6 @@ export function CalendarView() {
     const updated = { ...activeTask, title: reminderDraft.title.trim(), due, checklist: reminderDraft.checklist.map((item) => ({ ...item, text: item.text.trim() })).filter((item) => item.text) };
     updateTask({ ...updated, done: reminderDone(updated) });
     setSelectedTask(null);
-  }
-
-  function addChecklistItem() {
-    setReminderDraft((current) => ({ ...current, checklist: [...current.checklist, { id: crypto.randomUUID(), text: '', done: false }] }));
-  }
-
-  function editChecklistItem(id: string, changes: Partial<ChecklistEntry>) {
-    setReminderDraft((current) => ({ ...current, checklist: current.checklist.map((item) => item.id === id ? { ...item, ...changes } : item) }));
   }
 
   function move(direction: number) {
@@ -179,19 +183,17 @@ export function CalendarView() {
 
     {hoveredReminder && <div className="reminder-tooltip" role="tooltip" style={{ left: hoveredReminder.x, top: hoveredReminder.y, transform: `translate(${hoveredReminder.side === 'right' ? '0' : '-100%'}, -50%)` }}>{hoveredReminder.title}</div>}
 
-    {selectedEvent && activeEvent && <form ref={taskPopoverRef} className="reminder-popover" role="dialog" aria-label="Manage event" style={{ left: selectedEvent.x, top: selectedEvent.y, maxHeight: selectedEvent.maxHeight, transform: selectedEvent.above ? 'translateY(-100%)' : undefined }} onSubmit={saveEvent}>
-      <div className="reminder-popover-heading"><span><Clock3 size={14} /> Event</span><button type="button" aria-label="Close event" onClick={() => setSelectedEvent(null)}><X size={15} /></button></div>
-      <label>Title<input value={eventDraft.title} onChange={(event) => setEventDraft({ ...eventDraft, title: event.target.value })} required /></label>
-      <label>Starts<input type="datetime-local" value={eventDraft.start} onChange={(event) => setEventDraft({ ...eventDraft, start: event.target.value })} required /></label>
-      <label>Ends<input type="datetime-local" min={eventDraft.start} value={eventDraft.end} onChange={(event) => setEventDraft({ ...eventDraft, end: event.target.value })} required /></label>
-      <div className="reminder-checklist">{(activeEvent.checklist ?? []).map((item) => <div className="reminder-checklist-row" key={item.id}><button type="button" className={`reminder-check-button ${item.done ? 'done' : ''}`} role="checkbox" aria-checked={item.done} aria-label={item.text} onClick={() => updateEvent({ ...activeEvent, checklist: activeEvent.checklist!.map((entry) => entry.id === item.id ? { ...entry, done: !entry.done } : entry) })}>{item.done && <Check size={11} />}</button><span className={`reminder-check-text ${item.done ? 'done' : ''}`}>{item.text}</span><button type="button" className="checklist-remove" aria-label={`Remove ${item.text}`} onClick={() => updateEvent({ ...activeEvent, checklist: activeEvent.checklist!.filter((entry) => entry.id !== item.id) })}><X size={12} /></button></div>)}<div className="reminder-checklist-add"><input aria-label="New event task" value={eventChecklistItem} onChange={(event) => setEventChecklistItem(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addEventTask(); } }} placeholder="Add task" /><button type="button" onClick={addEventTask} aria-label="Add event task"><Plus size={14} /></button></div></div>
-      <div className="reminder-popover-actions"><button type="button" className="reminder-delete" aria-label="Delete event" onClick={() => { removeEvent(activeEvent.id); setSelectedEvent(null); }}><Trash2 size={13} /></button><button type="submit">Save</button></div>
+    {selectedEvent && activeEvent && <form ref={taskPopoverRef} className="reminder-popover reminder-editor event-editor" role="dialog" aria-label="Manage event" style={{ left: selectedEvent.x, top: selectedEvent.y, maxHeight: selectedEvent.maxHeight }} onSubmit={saveEvent}>
+      <div className="reminder-title-line"><strong>Evento ·</strong><textarea aria-label="Título del evento" value={eventDraft.title} onChange={(event) => setEventDraft({ ...eventDraft, title: event.target.value })} rows={1} ref={(element) => { if (element) { element.style.height = 'auto'; element.style.height = `${element.scrollHeight}px`; } }} required /><button type="button" className="reminder-close" aria-label="Close event" onClick={() => setSelectedEvent(null)}><X size={14} /></button></div>
+      {(['start', 'end'] as const).map((field) => <div className="reminder-moment" key={field}><span>{field === 'start' ? 'Inicio' : 'Fin'}</span><input aria-label={`Día de ${field === 'start' ? 'inicio' : 'fin'}`} type="date" value={eventDraft[field].slice(0, 10)} onChange={(event) => setEventDraft({ ...eventDraft, [field]: `${event.target.value}T${eventDraft[field].slice(11, 16)}` })} required /><input aria-label={`Hora de ${field === 'start' ? 'inicio' : 'fin'}`} type="time" value={eventDraft[field].slice(11, 16)} onChange={(event) => setEventDraft({ ...eventDraft, [field]: `${eventDraft[field].slice(0, 10)}T${event.target.value}` })} required /></div>)}
+      <EditableTaskList items={eventDraft.checklist} onChange={(checklist) => setEventDraft({ ...eventDraft, checklist })} />
+      <div className="reminder-editor-footer"><button type="button" className="reminder-delete" aria-label="Delete event" onClick={() => { removeEvent(activeEvent.id); setSelectedEvent(null); }}><Trash2 size={16} /></button><button type="submit" className="reminder-save">Save</button></div>
     </form>}
 
-    {selectedTask && activeTask && <form ref={taskPopoverRef} className="reminder-popover reminder-editor" role="dialog" aria-label="Manage reminder" style={{ left: selectedTask.x, top: selectedTask.y, maxHeight: selectedTask.maxHeight, transform: selectedTask.above ? 'translateY(-100%)' : undefined }} onSubmit={saveReminder}>
+    {selectedTask && activeTask && <form ref={taskPopoverRef} className="reminder-popover reminder-editor" role="dialog" aria-label="Manage reminder" style={{ left: selectedTask.x, top: selectedTask.y, maxHeight: selectedTask.maxHeight }} onSubmit={saveReminder}>
       <div className="reminder-title-line"><strong>{activeTask.reminder ? 'Recordatorio' : 'Tarea'} ·</strong><textarea aria-label="Título del recordatorio" value={reminderDraft.title} onChange={(event) => setReminderDraft({ ...reminderDraft, title: event.target.value })} rows={1} ref={(element) => { if (element) { element.style.height = 'auto'; element.style.height = `${element.scrollHeight}px`; } }} required /><button type="button" className="reminder-close" aria-label="Close reminder" onClick={() => setSelectedTask(null)}><X size={14} /></button></div>
       <div className="reminder-moment"><span>Momento</span><input aria-label="Día del recordatorio" type="date" value={reminderDraft.date} onChange={(event) => setReminderDraft({ ...reminderDraft, date: event.target.value })} /><div className={`reminder-time-field ${reminderDraft.allDay ? 'without-time' : ''}`}><input aria-label="Hora del recordatorio" className={reminderDraft.allDay ? 'without-time' : ''} type={reminderDraft.allDay ? 'text' : 'time'} value={reminderDraft.time} disabled={reminderDraft.allDay} onChange={(event) => setReminderDraft({ ...reminderDraft, time: event.target.value })} /></div><button type="button" className={`reminder-time-toggle ${reminderDraft.allDay ? 'off' : ''}`} aria-label={reminderDraft.allDay ? 'Activar hora' : 'Quitar hora'} aria-pressed={reminderDraft.allDay} title={reminderDraft.allDay ? 'Recordatorio de todo el día. Activar hora' : 'Convertir en recordatorio de todo el día'} onClick={() => setReminderDraft({ ...reminderDraft, allDay: !reminderDraft.allDay })}><X size={15} /></button></div>
-      <div className="reminder-editor-list">{reminderDraft.checklist.map((item) => <div className="reminder-editor-task" key={item.id}><button type="button" className={`reminder-task-check ${item.done ? 'done' : ''}`} role="checkbox" aria-checked={item.done} aria-label={item.text || 'Tarea sin título'} onClick={() => editChecklistItem(item.id, { done: !item.done })}>{item.done && <Check size={13} />}</button><input aria-label={`Título de tarea ${item.id}`} value={item.text} placeholder="Tarea" className={item.done ? 'done' : ''} autoFocus={!item.text} onChange={(event) => editChecklistItem(item.id, { text: event.target.value })} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addChecklistItem(); } }} /><button type="button" className="reminder-task-remove" aria-label={`Eliminar tarea ${item.text || 'sin título'}`} onClick={() => setReminderDraft({ ...reminderDraft, checklist: reminderDraft.checklist.filter((entry) => entry.id !== item.id) })}><X size={14} /></button></div>)}<button type="button" className="reminder-add-task" onClick={addChecklistItem}><Plus size={14} />Añadir tarea</button></div>
+      <EditableTaskList items={reminderDraft.checklist} onChange={(checklist) => setReminderDraft({ ...reminderDraft, checklist })} />
       <div className="reminder-editor-footer"><span className="reminder-auto-status">{reminderDone(activeTask, now) ? 'Done' : ''}</span><button type="button" className="reminder-delete" aria-label="Delete reminder" onClick={() => { removeTask(activeTask.id); setSelectedTask(null); }}><Trash2 size={16} /></button><button type="submit" className="reminder-save">Save</button></div>
     </form>}
 
