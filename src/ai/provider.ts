@@ -14,7 +14,7 @@ export interface ProviderProposal {
   after: string;
   payload: Record<string, unknown>;
 }
-export interface AIResponse { text: string; proposals?: ProviderProposal[]; profileUpdates?: ProfileUpdate[]; readFiles?: string[]; readBlocks?: string[]; readInk?: string[]; readWorkspace?: Array<'calendar' | 'tasks' | 'gym' | 'context' | 'profile'>; searchWeb?: boolean; model?: string; sources?: Array<{ title: string; url: string }> }
+export interface AIResponse { text: string; progress?: string; proposals?: ProviderProposal[]; profileUpdates?: ProfileUpdate[]; readFiles?: string[]; readBlocks?: string[]; readInk?: string[]; readWorkspace?: Array<'calendar' | 'tasks' | 'gym' | 'context' | 'profile'>; searchWeb?: boolean; model?: string; sources?: Array<{ title: string; url: string }> }
 export interface GeminiModelOption { id: string; label: string; profile: 'fast' | 'reasoning' }
 export interface CodexModelOption { id: string; label: string; default: boolean; defaultReasoningEffort: string; supportedReasoningEfforts: Array<{ reasoningEffort: string; description: string }> }
 export interface ProviderStatus { openai: boolean; anthropic: boolean; gemini: boolean; codex: boolean; codexInstalled?: boolean; models?: Record<ProviderId, string> }

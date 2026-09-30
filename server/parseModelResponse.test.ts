@@ -10,6 +10,10 @@ describe('AI response parsing', () => {
     expect(parsed.proposals).toEqual([]);
   });
 
+  it('preserves progress written by the model for the next read', () => {
+    expect(parseModelResponse(JSON.stringify({ text: '', progress: 'Comparo los eventos con tus horarios.', readWorkspace: ['calendar'] }))).toMatchObject({ progress: 'Comparo los eventos con tus horarios.', readWorkspace: ['calendar'] });
+  });
+
   it('preserves exact memory replacements through the API', () => {
     const update = { field: 'classes', value: 'Universidad a las 9, excepto lunes.', replace: [{ field: 'routines', value: 'Universidad a las 9.' }] };
     expect(parseModelResponse(JSON.stringify({ text: 'Vale', profileUpdates: [update] })).profileUpdates).toEqual([update]);

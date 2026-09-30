@@ -41,6 +41,7 @@ class CodexConnection {
   private completed?: (value: string) => void;
   private failed?: (error: Error) => void;
   private finalText = '';
+  private terminalError?: Error;
   onNotification?: (message: RpcMessage) => void;
   onFailure?: (error: Error) => void;
 
@@ -76,6 +77,7 @@ class CodexConnection {
   }
 
   private fail(error: Error) {
+    this.terminalError ??= error;
     for (const pending of this.requests.values()) pending.reject(error);
     this.requests.clear();
     this.failed?.(error);
@@ -85,6 +87,7 @@ class CodexConnection {
   private send(message: object) { this.child.stdin.write(`${JSON.stringify(message)}\n`); }
 
   request(method: string, params: object = {}) {
+    if (this.terminalError) return Promise.reject(this.terminalError);
     const id = this.nextId++;
     return new Promise<any>((resolve, reject) => {
       this.requests.set(id, { resolve, reject });
@@ -95,10 +98,11 @@ class CodexConnection {
   notify(method: string) { this.send({ method }); }
 
   waitForTurn() {
+    if (this.terminalError) return Promise.reject(this.terminalError);
     return new Promise<string>((resolve, reject) => { this.completed = resolve; this.failed = reject; });
   }
 
-  close() { this.child.kill(); }
+  close(error?: Error) { if (error) this.fail(error); this.child.kill(); }
 }
 
 type LoginState = { status: 'idle' | 'pending' | 'complete' | 'failed'; verificationUrl?: string; userCode?: string; message?: string };
@@ -171,7 +175,14 @@ export async function completeWithCodex(input: {
 }) {
   const directory = await mkdtemp(join(tmpdir(), 'notehub-codex-'));
   let connection: CodexConnection | undefined;
-  const timer = setTimeout(() => connection?.close(), 120_000);
+  const configuredTimeout = Number(process.env.NOTEHUB_CODEX_IDLE_TIMEOUT_MS);
+  const idleTimeout = Number.isFinite(configuredTimeout) && configuredTimeout > 0 ? configuredTimeout : 300_000;
+  let timer: ReturnType<typeof setTimeout>;
+  const resetIdleTimer = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => connection?.close(new Error('Codex no ha enviado actividad durante demasiado tiempo. Vuelve a intentarlo.')), idleTimeout);
+  };
+  resetIdleTimer();
   try {
     const imageItems: Array<{ type: 'localImage'; path: string }> = [];
     for (const [index, image] of input.images.entries()) {
@@ -182,9 +193,17 @@ export async function completeWithCodex(input: {
       imageItems.push({ type: 'localImage', path });
     }
     connection = await connect();
+    const commentary = new Map<string, string>();
     connection.onNotification = (message) => {
+      resetIdleTimer(); // Reasoning, text and tool activity keep long requests alive.
       const item = message.params?.item;
-      if (message.method === 'item/completed' && item?.type === 'agentMessage' && item.phase === 'commentary' && typeof item.text === 'string') input.onProgress?.(item.text);
+      if (message.method === 'item/started' && item?.type === 'agentMessage' && item.phase === 'commentary') commentary.set(item.id, '');
+      if (message.method === 'item/agentMessage/delta' && commentary.has(message.params?.itemId) && typeof message.params.delta === 'string') {
+        const text = (commentary.get(message.params.itemId)! + message.params.delta).slice(-2000);
+        commentary.set(message.params.itemId, text);
+        input.onProgress?.(text);
+      }
+      if (message.method === 'item/completed' && item?.type === 'agentMessage' && item.phase === 'commentary' && typeof item.text === 'string') { input.onProgress?.(item.text); commentary.delete(item.id); }
     };
     const models = await connection.request('model/list', { limit: 30, includeHidden: false });
     const choices = (models?.data ?? []).filter((item: any) => typeof item.model === 'string');
@@ -210,7 +229,7 @@ export async function completeWithCodex(input: {
     if (!text.trim()) throw new Error('Codex returned an empty response.');
     return { text, model: selected.model as string };
   } finally {
-    clearTimeout(timer);
+    clearTimeout(timer!);
     connection?.close();
     await rm(directory, { recursive: true, force: true });
   }

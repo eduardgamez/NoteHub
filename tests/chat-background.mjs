@@ -18,15 +18,19 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
  if (request.method === 'thread/start') result = { thread: { id: 'test-thread' } };
  send({ id: request.id, result });
  if (request.method === 'turn/start') {
-  setTimeout(() => send({ method: 'item/completed', params: { item: { type: 'agentMessage', phase: 'commentary', text: 'Estoy comprobando la información disponible.' } } }), 100);
+  const quiet = request.params.input[0].text.includes('quiet-test');
+  const activity = quiet ? undefined : setInterval(() => send({ method: 'item/reasoning/textDelta', params: { delta: 'test activity' } }), 400);
+  if (!quiet) setTimeout(() => send({ method: 'item/completed', params: { item: { type: 'agentMessage', phase: 'commentary', text: 'Estoy comprobando la información disponible.' } } }), 100);
+  if (!quiet) setTimeout(() => send({ method: 'item/completed', params: { item: { type: 'agentMessage', phase: 'commentary', text: 'Ahora estoy contrastando los datos.' } } }), 700);
   setTimeout(() => {
+   clearInterval(activity);
    send({ method: 'item/completed', params: { item: { type: 'agentMessage', phase: 'final_answer', text: JSON.stringify({ text: 'Respuesta terminada en segundo plano.', proposals: [] }) } } });
    send({ method: 'turn/completed', params: { turn: { status: 'completed' } } });
   }, 4000);
  }
 });
 `, { mode: 0o755 });
-const broker = spawn(resolve('node_modules/.bin/tsx'), ['server/index.ts'], { env: { ...process.env, NOTEHUB_API_PORT: '8789', NOTEHUB_REQUIRE_AUTH: 'false', NOTEHUB_WEB_ORIGIN: 'http://127.0.0.1:5189', NOTEHUB_CODEX_BIN: binary }, stdio: ['ignore', 'ignore', 'pipe'] });
+const broker = spawn(resolve('node_modules/.bin/tsx'), ['server/index.ts'], { env: { ...process.env, NOTEHUB_API_PORT: '8789', NOTEHUB_CODEX_IDLE_TIMEOUT_MS: '1500', NOTEHUB_REQUIRE_AUTH: 'false', NOTEHUB_WEB_ORIGIN: 'http://127.0.0.1:5189', NOTEHUB_CODEX_BIN: binary }, stdio: ['ignore', 'ignore', 'pipe'] });
 broker.stderr.on('data', (data) => process.stderr.write(data));
 const web = spawn('npm', ['run', 'dev:web', '--', '--host', '127.0.0.1', '--port', '5189', '--strictPort'], { stdio: 'ignore' });
 let browser;
@@ -50,9 +54,12 @@ try {
  await page.locator('.home-ai textarea').fill('Revisa mis datos');
  await page.getByRole('button', { name: 'Send', exact: true }).click();
  await page.getByText('Estoy comprobando la información disponible.', { exact: true }).waitFor({ timeout: 10000 }).catch(async (error) => { console.log('Chat error:', await page.locator('.ai-error').textContent().catch(() => 'none')); throw error; });
+ await page.getByText('Ahora estoy contrastando los datos.', { exact: true }).waitFor();
+ assert.equal(await page.locator('.chat-progress p').count(), 1);
+ assert.equal(await page.getByText('Estoy comprobando la información disponible.', { exact: true }).count(), 0);
  await page.getByRole('button', { name: 'Settings', exact: true }).click();
  await page.getByRole('button', { name: 'NoteHub home', exact: true }).click();
- await page.getByText('Estoy comprobando la información disponible.', { exact: true }).waitFor();
+ await page.getByText('Ahora estoy contrastando los datos.', { exact: true }).waitFor();
  assert.equal(await page.getByRole('button', { name: 'Send', exact: true }).isDisabled(), true);
  await page.getByRole('button', { name: 'Settings', exact: true }).click();
  // Let the response finish while the chat panel is unmounted.
@@ -62,5 +69,12 @@ try {
  assert.equal(await page.getByRole('button', { name: 'Send', exact: true }).isEnabled(), true);
  assert.equal(await page.locator('.chat-progress').count(), 0);
  assert.equal(await page.locator('.message.assistant').count(), 1);
+ await page.locator('.home-ai textarea').fill('quiet-test');
+ await page.getByRole('button', { name: 'Send', exact: true }).click();
+ await page.getByRole('button', { name: 'Settings', exact: true }).click();
+ await page.waitForTimeout(2200);
+ await page.getByRole('button', { name: 'NoteHub home', exact: true }).click();
+ await page.getByText('Codex no ha enviado actividad durante demasiado tiempo. Vuelve a intentarlo.', { exact: true }).waitFor();
+ assert.equal(await page.getByRole('button', { name: 'Send', exact: true }).isEnabled(), true);
  console.log('Background chat passed with real broker and simulated Codex: live commentary, remount, duplicate prevention and completion while hidden.');
 } finally { await browser?.close(); broker.kill('SIGTERM'); web.kill('SIGTERM'); await rm(directory, { recursive: true, force: true }); }

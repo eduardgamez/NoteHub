@@ -6,14 +6,14 @@ interface ChatRun { running: boolean; progress: string[]; error?: ChatRunError }
 export const useChatRuns = create<{ runs: Record<string, ChatRun> }>(() => ({ runs: {} }));
 export function startChatRun(threadId: string): boolean {
   if (useChatRuns.getState().runs[threadId]?.running) return false;
-  useChatRuns.setState((state) => ({ runs: { ...state.runs, [threadId]: { running: true, progress: ['Preparando el contexto…'] } } }));
+  useChatRuns.setState((state) => ({ runs: { ...state.runs, [threadId]: { running: true, progress: [] } } }));
   return true;
 }
 export function chatProgress(threadId: string, message: string) {
   useChatRuns.setState((state) => {
     const run = state.runs[threadId];
     if (!run?.running || !message.trim() || run.progress.at(-1) === message.trim()) return state;
-    return { runs: { ...state.runs, [threadId]: { ...run, progress: [...run.progress, message.trim().slice(0, 1000)].slice(-8) } } };
+    return { runs: { ...state.runs, [threadId]: { ...run, progress: [message.trim().slice(0, 2000)] } } };
   });
 }
 export function setChatRunError(threadId: string, error?: ChatRunError) {
