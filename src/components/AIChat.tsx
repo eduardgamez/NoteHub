@@ -1,6 +1,6 @@
 import { useChatRuns, startChatRun, chatProgress, setChatRunError, finishChatRun, type ChatRunError } from '../ai/chatRuns';
 import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUp, CalendarDays, Check, ChevronDown, Clock3, Dumbbell, FileText, Lightbulb, Paperclip, Pencil, Plus, Settings, Sparkles, Trash2, X } from 'lucide-react';
+import { ArrowUp, CalendarDays, Check, ChevronDown, Clock3, Dumbbell, FileText, Lightbulb, Paperclip, Pencil, Plus, RotateCcw, Settings, Sparkles, Trash2, X } from 'lucide-react';
 import { AIConfigurationError, AIQuotaError, AIUnavailableError, aiProvider, getActiveProvider, getCodexModels, getGeminiModels, getProviderStatus } from '../ai/provider';
 import { ATTACHMENT_ACCEPT, MAX_ATTACHMENT_BYTES, attachmentContext, attachmentSize, prepareAttachment } from '../ai/attachments';
 import { hasProviderKey } from '../ai/keyVault';
@@ -77,6 +77,8 @@ export function AIChat({ global = false, compact = false, home = false }: AIChat
   const draftAttachments = attachments[draftKey] ?? [];
   const session = state.chatSessions[threadId];
   const messages = state.chatThreads[threadId] ?? [];
+  const lastAnswerIndex = messages.reduce((last, message, index) => message.role === 'assistant' ? index : last, -1);
+  const unansweredCount = messages.length - lastAnswerIndex - 1;
   const pending = state.pendingProposals.filter((proposal) => proposal.threadId === threadId && proposal.status === 'pending');
   const run = runs[threadId];
   const thinking = run?.running ?? false;
@@ -205,11 +207,12 @@ export function AIChat({ global = false, compact = false, home = false }: AIChat
   }), [state.version, state.projects, state.folders, state.notes, state.activeNoteId, state.calendarEvents, state.tasks, state.reminderTemplates, state.exercises, state.routines, state.workouts, state.chatThreads, state.chatSessions, state.activeChatIds, state.pendingProposals, state.personalProfile]);
 
   async function send(prefill?: string, retry = false) {
+    const sendingMessages = useWorkspace.getState().chatThreads[threadId] ?? [];
     const content = (prefill ?? inputRef.current?.value ?? '').trim() || (!retry && draftAttachments.length ? 'Lee los archivos adjuntos.' : '');
     if (preparing) return;
-    const greetingOnly = /^(?:hola+|hello|hi|hey|buenas|buenos d[ií]as|buenas tardes|buenas noches)[!¡?.\s]*$/i.test(content) && !state.aiTextSelection && !draftAttachments.length && !(retry && messages.at(-1)?.attachments?.length);
+    const greetingOnly = /^(?:hola+|hello|hi|hey|buenas|buenos d[ií]as|buenas tardes|buenas noches)[!¡?.\s]*$/i.test(content) && !state.aiTextSelection && !draftAttachments.length && !(retry && sendingMessages.at(-1)?.attachments?.length);
     if (!content || (threadId && useChatRuns.getState().runs[threadId]?.running)) return;
-    const reuseLastMessage = retry && messages.at(-1)?.role === 'user' && messages.at(-1)?.content === content;
+    const reuseLastMessage = retry && sendingMessages.at(-1)?.role === 'user' && sendingMessages.at(-1)?.content === content;
     if (!retry && inputRef.current) { inputRef.current.value = ''; resizeComposer(); }
     const sendingThreadId = threadId || state.createChatSession(scope);
     const profileAtSend = useWorkspace.getState().personalProfile;
@@ -218,13 +221,13 @@ export function AIChat({ global = false, compact = false, home = false }: AIChat
     const personalSummary = profileChanged ? profileSummary(profileAtSend) : state.readProfileForChat(sendingThreadId);
     if (modelName) state.setChatSessionModel(sendingThreadId, currentModelLabel);
     setError(null);
-    const userMessage = reuseLastMessage ? messages.at(-1)! : { ...newChatMessage('user', content), ...(draftAttachments.length ? { attachments: draftAttachments } : {}) };
+    const userMessage = reuseLastMessage ? sendingMessages.at(-1)! : { ...newChatMessage('user', content), ...(draftAttachments.length ? { attachments: draftAttachments } : {}) };
     if (!retry) setAttachments((current) => ({ ...current, [draftKey]: [] }));
     if (!reuseLastMessage) state.appendChatMessage(sendingThreadId, userMessage);
     if (!startChatRun(sendingThreadId)) return;
     const progress = (message: string) => chatProgress(sendingThreadId, message);
     try {
-      const conversation = (reuseLastMessage ? messages : [...messages, userMessage]).slice(-20);
+      const conversation = (reuseLastMessage ? sendingMessages : [...sendingMessages, userMessage]).slice(-20);
       const permissions = getAIPermissions();
       const access = global ? { permissions } : { projectId: project?.id, currentNoteId: note?.id, selectedBlockIds: state.selectedIds, permissions };
       const context: AIContextItem[] = [
@@ -342,6 +345,22 @@ export function AIChat({ global = false, compact = false, home = false }: AIChat
     } finally { finishChatRun(sendingThreadId); }
   }
 
+  function removeUnanswered(messageId: string) {
+    if (useChatRuns.getState().runs[threadId]?.running) return;
+    if (state.removeUnansweredChatMessages(threadId, [messageId])) setError(null);
+  }
+
+  function retryMessage(messageId: string) {
+    if (useChatRuns.getState().runs[threadId]?.running) return;
+    const current = useWorkspace.getState().chatThreads[threadId] ?? [];
+    const index = current.findIndex((message) => message.id === messageId);
+    if (index < 0 || current[index].role !== 'user' || current.slice(index + 1).some((message) => message.role !== 'user')) return;
+    const following = current.slice(index + 1).map((message) => message.id);
+    if (following.length && !state.removeUnansweredChatMessages(threadId, following)) return;
+    setError(null);
+    void send(current[index].content, true);
+  }
+
   function modify(id: string, current: string) {
     const after = window.prompt('Edit the proposed result', current);
     if (after?.trim()) {
@@ -394,7 +413,7 @@ export function AIChat({ global = false, compact = false, home = false }: AIChat
     <div className="ai-thread" ref={threadRef}>
       {compact && messages.length === 0 && providerConnected !== null && <div className="provider-empty">{providerConnected ? `Using ${currentModelLabel}${providerId === 'codex' && codexEffortText ? ` · ${codexEffortText}` : ''}` : 'No API connected'}</div>}
       {messages.length === 0 && !compact && <div className="message assistant"><div className="ai-avatar"><Sparkles size={13} /></div><div>{greeting}</div></div>}
-      {messages.map((message) => <div key={message.id} className={`message ${message.role}`}>{message.role === 'assistant' && !compact && <div className="ai-avatar"><Sparkles size={13} /></div>}<div className="message-body">{message.role === 'assistant' ? <Suspense fallback={null}><AIMessageContent content={message.content} /></Suspense> : <>{message.content}{message.attachments?.length ? <div className="chat-message-attachments">{message.attachments.map((attachment) => <div key={attachment.id}><Paperclip size={13} /><span>{attachment.name}</span>{attachment.images[0] && <img src={attachment.images[0]} alt={attachment.name} />}</div>)}</div> : null}</>}{message.sources && message.sources.length > 0 && <div className="message-sources">Sources: {message.sources.map((source, index) => <a key={`${source.url}:${index}`} href={source.url} target="_blank" rel="noopener noreferrer">{source.title}</a>)}</div>}</div></div>)}
+      {messages.map((message, index) => <div key={message.id} className={`message ${message.role}${message.role === 'user' && index > lastAnswerIndex ? ' unanswered' : ''}`}>{message.role === 'user' && index > lastAnswerIndex && <div className="chat-message-actions">{unansweredCount > 1 && <button type="button" disabled={thinking} aria-label="Eliminar mensaje" title="Eliminar este mensaje" onClick={() => removeUnanswered(message.id)}><Trash2 size={14} /></button>}<button type="button" disabled={thinking} aria-label="Reintentar desde este mensaje" title="Reenviar hasta este mensaje y eliminar los posteriores" onClick={() => retryMessage(message.id)}><RotateCcw size={14} /></button></div>}{message.role === 'assistant' && !compact && <div className="ai-avatar"><Sparkles size={13} /></div>}<div className="message-body">{message.role === 'assistant' ? <Suspense fallback={null}><AIMessageContent content={message.content} /></Suspense> : <>{message.content}{message.attachments?.length ? <div className="chat-message-attachments">{message.attachments.map((attachment) => <div key={attachment.id}><Paperclip size={13} /><span>{attachment.name}</span>{attachment.images[0] && <img src={attachment.images[0]} alt={attachment.name} />}</div>)}</div> : null}</>}{message.sources && message.sources.length > 0 && <div className="message-sources">Sources: {message.sources.map((source, index) => <a key={`${source.url}:${index}`} href={source.url} target="_blank" rel="noopener noreferrer">{source.title}</a>)}</div>}</div></div>)}
       {thinking && <div className="message assistant">{!compact && <div className="ai-avatar"><Sparkles size={13} /></div>}<div className="chat-progress" role="status" aria-live="polite"><div className="typing"><i /><i /><i /></div>{run?.progress.at(-1) && <p>{run.progress.at(-1)}</p>}</div></div>}
       {error?.threadId === threadId && <div className="ai-error"><Settings size={16} /><span>{error.message}</span>{error.retryContent && !error.settings && <button onClick={() => void send(error.retryContent, true)}>Reintentar</button>}{error.settings && <button onClick={() => state.setActiveView('settings')}>Open settings</button>}{error.quota && <>{compact && <button onClick={() => setModelMenuOpen(true)}>Cambiar modelo</button>}<a href="https://ai.dev/rate-limit" target="_blank" rel="noopener noreferrer">Ver cuota</a></>}</div>}
       {pending.length > 0 && <div className="proposal-queue"><div className="proposal-heading"><span>First proposal</span><span>{pending.length} pending</span></div>

@@ -873,3 +873,10 @@ html:has(.home-layout), body:has(.home-layout),
 .chat-progress .typing { padding: 5px 0; }
 .chat-progress p { margin: 5px 0; white-space: pre-wrap; }
 .chat-progress p:last-child { color: var(--text-soft); }
+.message.user.unanswered { position: relative; padding-right: 67px; }
+.chat-message-actions { position: absolute; right: 5px; top: 50%; transform: translateY(-50%); display: flex; gap: 2px; opacity: 0; pointer-events: none; transition: opacity .12s; }
+.message.user:hover .chat-message-actions, .message.user:focus-within .chat-message-actions { opacity: 1; pointer-events: auto; }
+.chat-message-actions button { display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 50%; color: var(--muted); background: transparent; cursor: pointer; }
+.chat-message-actions button:hover { background: var(--panel-raised); color: var(--text); }
+.chat-message-actions button:disabled { opacity: .35; cursor: default; }
+@media (hover: none) { .chat-message-actions { opacity: 1; pointer-events: auto; } }

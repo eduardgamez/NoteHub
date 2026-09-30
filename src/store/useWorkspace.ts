@@ -78,6 +78,7 @@ interface WorkspaceStore extends WorkspaceStateData {
   addWorkout: (workout: Workout) => void;
   updateWorkout: (workout: Workout) => void;
   addExercise: (exercise: Exercise) => void;
+  removeUnansweredChatMessages: (threadId: string, messageIds: string[]) => boolean;
   appendChatMessage: (threadId: string, message: ChatMessageRecord) => void;
   createChatSession: (scope: string) => string;
   selectChatSession: (scope: string, sessionId: string) => void;
@@ -524,6 +525,15 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
     if (get().personalProfile === previous) return;
     persist(get()); syncEngine.publish({ kind: 'profile.upsert', profile: get().personalProfile });
   },
+  removeUnansweredChatMessages(threadId, messageIds) {
+    const messages = get().chatThreads[threadId] ?? [];
+    const lastAnswer = messages.reduce((last, message, index) => message.role === 'assistant' ? index : last, -1);
+    const ids = new Set(messageIds);
+    if (!ids.size || [...ids].some((id) => !messages.some((message, index) => message.id === id && message.role === 'user' && index > lastAnswer))) return false;
+    set((state) => ({ chatThreads: { ...state.chatThreads, [threadId]: messages.filter((message) => !ids.has(message.id)) } }));
+    persist(get()); syncEngine.publish({ kind: 'chat.messages.remove', threadId, messageIds: [...ids] });
+    return true;
+  },
   appendChatMessage(threadId, message) {
     const session = get().chatSessions[threadId];
     if (!session) return;
@@ -674,6 +684,7 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
       if (scope && activeChatIds[scope] === operation.sessionId) delete activeChatIds[scope];
       return { chatSessions, chatThreads, activeChatIds, pendingProposals: state.pendingProposals.filter((proposal) => proposal.threadId !== operation.sessionId) };
     });
+    if (operation.kind === 'chat.messages.remove') set((state) => ({ chatThreads: { ...state.chatThreads, [operation.threadId]: (state.chatThreads[operation.threadId] ?? []).filter((message) => !operation.messageIds.includes(message.id)) } }));
     if (operation.kind === 'chat.message') set((state) => state.chatSessions[operation.threadId] ? ({ chatThreads: { ...state.chatThreads, [operation.threadId]: (state.chatThreads[operation.threadId] ?? []).some((message) => message.id === operation.message.id) ? state.chatThreads[operation.threadId] : [...(state.chatThreads[operation.threadId] ?? []), operation.message] } }) : state);
     if (operation.kind === 'proposal.upsert') set((state) => ({ pendingProposals: state.pendingProposals.some((item) => item.id === operation.proposal.id) ? state.pendingProposals.map((item) => item.id === operation.proposal.id ? operation.proposal : item) : [...state.pendingProposals, operation.proposal] }));
     persist(get());

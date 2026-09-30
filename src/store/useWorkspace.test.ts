@@ -193,3 +193,22 @@ describe('AI event and reminder deletion', () => {
     expect(useWorkspace.getState().pendingProposals.every((item) => item.status === 'pending')).toBe(true);
   });
 });
+
+describe('unanswered chat message removal', () => {
+  beforeEach(() => useWorkspace.setState({ ...structuredClone(seedWorkspace) }));
+  it('preserves answered history and replays the same removal on another device', () => {
+    const store = useWorkspace.getState(); const id = store.createChatSession('global');
+    store.appendChatMessage(id, { id: 'answered-user', role: 'user', content: 'Anterior', createdAt: 1 });
+    store.appendChatMessage(id, { id: 'answer', role: 'assistant', content: 'Respuesta', createdAt: 2 });
+    store.appendChatMessage(id, { id: 'retry-target', role: 'user', content: 'Revisa todo', createdAt: 3 });
+    store.appendChatMessage(id, { id: 'discard', role: 'user', content: 'dale', createdAt: 4 });
+    const original = useWorkspace.getState().chatThreads[id];
+    expect(store.removeUnansweredChatMessages(id, ['answered-user'])).toBe(false);
+    expect(store.removeUnansweredChatMessages(id, ['answer', 'discard'])).toBe(false);
+    expect(store.removeUnansweredChatMessages(id, ['discard'])).toBe(true);
+    expect(useWorkspace.getState().chatThreads[id].map((message) => message.id)).toEqual(['answered-user', 'answer', 'retry-target']);
+    useWorkspace.setState({ chatThreads: { [id]: original } });
+    store.applyRemote({ kind: 'chat.messages.remove', threadId: id, messageIds: ['discard'], source: 'other-device', timestamp: 5, opId: 'removal' });
+    expect(useWorkspace.getState().chatThreads[id].map((message) => message.id)).toEqual(['answered-user', 'answer', 'retry-target']);
+  });
+});

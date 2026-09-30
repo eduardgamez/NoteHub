@@ -25,6 +25,7 @@ export type SyncPayload =
   | { kind: 'task.remove'; taskId: string }
   | { kind: 'workout.upsert'; workout: Workout }
   | { kind: 'exercise.upsert'; exercise: Exercise }
+  | { kind: 'chat.messages.remove'; threadId: string; messageIds: string[] }
   | { kind: 'chat.message'; threadId: string; message: ChatMessageRecord }
   | { kind: 'chat.session.upsert'; session: ChatSession }
   | { kind: 'chat.session.remove'; sessionId: string }
