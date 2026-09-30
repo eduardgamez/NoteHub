@@ -144,14 +144,16 @@ it('edits event start and end as separate dates and mandatory times', () => {
 });
 
 
-it('creates an all-day reminder from a template with editable and reorderable tasks', () => {
-  useWorkspace.setState({ reminderTemplates: [{ id: 'template', title: 'Gastos', items: ['Revisar', 'Separar'] }] });
+it('creates an all-day reminder with editable and reorderable tasks', () => {
   render(<CalendarView />);
   fireEvent.click(screen.getByRole('button', { name: /^Create$/ }));
   const dialog = screen.getByRole('dialog', { name: 'Create calendar item' });
   fireEvent.click(within(dialog).getByRole('button', { name: 'Recordatorio' }));
-  fireEvent.change(within(dialog).getByLabelText('Plantilla'), { target: { value: 'template' } });
-  expect(within(dialog).getByLabelText('Título')).toHaveValue('Gastos');
+  fireEvent.change(within(dialog).getByLabelText('Título'), { target: { value: 'Gastos' } });
+  for (const text of ['Revisar', 'Separar']) {
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Añadir tarea' }));
+    fireEvent.change(within(dialog).getAllByPlaceholderText('Tarea').at(-1)!, { target: { value: text } });
+  }
   fireEvent.change(within(dialog).getByDisplayValue('Revisar'), { target: { value: 'Revisar recibos' } });
   fireEvent.keyDown(within(dialog).getByRole('button', { name: 'Mover tarea Revisar recibos' }), { key: 'ArrowDown' });
   fireEvent.click(within(dialog).getByRole('button', { name: 'Quitar hora' }));

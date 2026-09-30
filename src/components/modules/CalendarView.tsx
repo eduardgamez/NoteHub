@@ -28,7 +28,6 @@ function localInputValue(date: Date) { return new Date(date.getTime() - date.get
 export function CalendarView() {
   const events = useWorkspace((state) => state.calendarEvents);
   const tasks = useWorkspace((state) => state.tasks);
-  const templates = useWorkspace((state) => state.reminderTemplates);
   const updateEvent = useWorkspace((state) => state.updateEvent);
   const addEvent = useWorkspace((state) => state.addEvent);
   const addTask = useWorkspace((state) => state.addTask);
@@ -39,7 +38,6 @@ export function CalendarView() {
   const [cursor, setCursor] = useState(new Date());
   const [creating, setCreating] = useState(false);
   const [creationKind, setCreationKind] = useState<'event' | 'reminder'>('event');
-  const [templateId, setTemplateId] = useState('');
   const [selectedTask, setSelectedTask] = useState<PopoverPosition | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<PopoverPosition | null>(null);
   const [eventDraft, setEventDraft] = useState({ title: '', start: '', end: '', checklist: [] as ChecklistEntry[] });
@@ -151,7 +149,7 @@ export function CalendarView() {
       const task: Task = { id: crypto.randomUUID(), title: draft.title.trim(), done: false, reminder: true, due, checklist: creationTasks.map((item) => ({ ...item, text: item.text.trim() })).filter((item) => item.text) };
       addTask({ ...task, done: reminderDone(task) });
     }
-    setCreating(false); setCreationTasks([]); setCreationAllDay(false); setTemplateId(''); setDraft({ ...draft, title: '' });
+    setCreating(false); setCreationTasks([]); setCreationAllDay(false); setDraft({ ...draft, title: '' });
   }
 
   return <div className="module-view calendar-view">
@@ -214,7 +212,6 @@ export function CalendarView() {
         const withoutTime = creationKind === 'reminder' && creationAllDay;
         return <div className="reminder-moment" key={field}><span>{label === 'momento' ? 'Momento' : label === 'inicio' ? 'Inicio' : 'Fin'}</span><input aria-label={`Día de ${label}`} type="date" value={draft[field].slice(0, 10)} onChange={(event) => setDraft({ ...draft, [field]: `${event.target.value}T${draft[field].slice(11, 16)}` })} required /><div className={`reminder-time-field ${withoutTime ? 'without-time' : ''}`}><input aria-label={`Hora de ${label}`} type={withoutTime ? 'text' : 'time'} value={draft[field].slice(11, 16)} disabled={withoutTime} onChange={(event) => setDraft({ ...draft, [field]: `${draft[field].slice(0, 10)}T${event.target.value}` })} required={!withoutTime} /></div>{creationKind === 'reminder' && <button type="button" className={`reminder-time-toggle ${withoutTime ? 'off' : ''}`} aria-label={withoutTime ? 'Activar hora' : 'Quitar hora'} aria-pressed={withoutTime} onClick={() => setCreationAllDay(!creationAllDay)}><X size={15} /></button>}</div>;
       })}
-      {creationKind === 'reminder' && <label className="calendar-template">Plantilla<select value={templateId} onChange={(event) => { const next = event.target.value; setTemplateId(next); const template = templates.find((item) => item.id === next); if (template) { setDraft({ ...draft, title: template.title }); setCreationTasks(template.items.map((text) => ({ id: crypto.randomUUID(), text, done: false }))); } }}><option value="">Ninguna</option>{templates.map((template) => <option key={template.id} value={template.id}>{template.title}</option>)}</select></label>}
       <EditableTaskList items={creationTasks} onChange={setCreationTasks} />
       <div className="reminder-editor-footer"><button className="reminder-save" type="submit">Crear {creationKind === 'event' ? 'evento' : 'recordatorio'}</button></div>
     </form></div>}
