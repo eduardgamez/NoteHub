@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, ChevronDown, ChevronRight, Copy, FilePlus2, FileText, Folder, FolderPlus, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronRight, Copy, FilePlus2, FileText, Folder, FolderPlus, MoreHorizontal, Pencil, Trash2, X } from 'lucide-react';
 import { useWorkspace } from '../store/useWorkspace';
 import type { Folder as FolderRecord, Note } from '../types';
 
@@ -19,6 +19,7 @@ export function Sidebar() {
   const setActiveNote = useWorkspace((state) => state.setActiveNote);
   const setActiveView = useWorkspace((state) => state.setActiveView);
   const setAiOpen = useWorkspace((state) => state.setAiOpen);
+  const setSidebarOpen = useWorkspace((state) => state.setSidebarOpen);
   const addFolder = useWorkspace((state) => state.addFolder);
   const updateFolder = useWorkspace((state) => state.updateFolder);
   const duplicateFolder = useWorkspace((state) => state.duplicateFolder);
@@ -107,7 +108,7 @@ export function Sidebar() {
     event.preventDefault();
     showMenu('blank', undefined, event.clientX + 6, event.clientY);
   }}>
-    <div className="project-sidebar-heading"><button aria-label="Back to home" onClick={() => { setActiveView('calendar'); setAiOpen(false); }}><ArrowLeft size={19} /></button><strong>PROJECTS</strong></div>
+    <div className="project-sidebar-heading"><button aria-label="Back to home" onClick={() => { setActiveView('calendar'); setAiOpen(false); }}><ArrowLeft size={19} /></button><strong>PROJECTS</strong><button type="button" aria-label="Close project explorer" title="Close project explorer" onClick={() => setSidebarOpen(false)}><X size={18} /></button></div>
     {project ? <div className="project-tree"><div className="project-tree-root"><span>{project.emoji}</span><strong>{project.title}</strong></div>
       <div className="project-tree-children">{folders.filter((folder) => !folder.parentId || !folders.some((parent) => parent.id === folder.parentId)).map(folderRow)}{notes.filter((note) => !note.folderId || !folders.some((folder) => folder.id === note.folderId)).map(noteRow)}{newItem()}</div>
     </div> : <p className="project-tree-empty">Project not found.</p>}
