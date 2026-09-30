@@ -898,7 +898,7 @@ html:has(.home-layout), body:has(.home-layout),
 .reminder-moment input[type='date'] { flex: 1.6; width: 0; }
 .reminder-moment input[type='time'] { flex: 1; width: 0; }
 .reminder-moment .without-time { text-decoration: line-through; opacity: .45; }
-.reminder-time-toggle { flex: none; width: 24px; height: 28px; display: grid; place-items: center; padding: 0; border: 1px solid #e5c8c8; border-radius: 5px; background: #faeeee; color: #b97070; cursor: pointer; }
+.reminder-time-toggle { flex: none; width: 20px; height: 20px; display: grid; place-items: center; padding: 0; border: 1px solid #e5c8c8; border-radius: 5px; background: #faeeee; color: #b97070; cursor: pointer; }
 .reminder-time-toggle.off { border-color: var(--line); background: var(--panel); color: var(--faint); }
 .reminder-editor-list { display: grid; gap: 8px; }
 .reminder-editor-task { display: flex; align-items: center; gap: 9px; min-width: 0; }
