@@ -155,3 +155,41 @@ describe('mobile project panels', () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
   });
 });
+
+
+describe('AI event and reminder deletion', () => {
+  const event = { id: 'event-to-delete', title: 'Universidad', start: '2026-10-01T09:00:00Z', end: '2026-10-01T10:00:00Z', color: 'green' as const };
+  const task = { id: 'reminder-to-delete', title: 'Llevar apuntes', done: false, reminder: true, checklist: [] };
+  const deletion = (kind: 'calendar.delete' | 'task.delete'): PendingProposal => ({
+    id: kind, threadId: 'global', kind, title: 'Eliminar', description: 'Eliminar elemento consultado', after: 'Eliminado',
+    payload: kind === 'calendar.delete' ? { eventId: event.id, expected: JSON.stringify(event) } : { taskId: task.id, expected: JSON.stringify(task) },
+    status: 'pending', createdAt: 1,
+  });
+  beforeEach(() => useWorkspace.setState({ ...structuredClone(seedWorkspace), calendarEvents: [event, { ...event, id: 'other-event' }], tasks: [task, { ...task, id: 'other-task' }], pendingProposals: [deletion('calendar.delete'), deletion('task.delete')] }));
+
+  it('removes only the exact event and reminder after approval', () => {
+    const store = useWorkspace.getState();
+    store.resolveProposal('calendar.delete', 'approved');
+    store.resolveProposal('task.delete', 'approved');
+    expect(useWorkspace.getState().calendarEvents.map((item) => item.id)).toEqual(['other-event']);
+    expect(useWorkspace.getState().tasks.map((item) => item.id)).toEqual(['other-task']);
+    expect(useWorkspace.getState().pendingProposals.every((item) => item.status === 'approved')).toBe(true);
+  });
+
+  it('keeps rejected events and reminders', () => {
+    useWorkspace.getState().resolveProposal('calendar.delete', 'rejected');
+    useWorkspace.getState().resolveProposal('task.delete', 'rejected');
+    expect(useWorkspace.getState().calendarEvents).toHaveLength(2);
+    expect(useWorkspace.getState().tasks).toHaveLength(2);
+  });
+
+  it('does not delete an item changed since the proposal or an unknown ID', () => {
+    useWorkspace.getState().updateEvent({ ...event, title: 'Cambio posterior' });
+    useWorkspace.getState().resolveProposal('calendar.delete', 'approved');
+    useWorkspace.getState().updateProposal('task.delete', { payload: { taskId: 'invented' } });
+    useWorkspace.getState().resolveProposal('task.delete', 'approved');
+    expect(useWorkspace.getState().calendarEvents).toHaveLength(2);
+    expect(useWorkspace.getState().tasks).toHaveLength(2);
+    expect(useWorkspace.getState().pendingProposals.every((item) => item.status === 'pending')).toBe(true);
+  });
+});

@@ -286,6 +286,13 @@ export function AIChat({ global = false, compact = false, home = false }: AIChat
         if (searchRequested) context.push({ id: 'web-search-ready', type: 'tool-status', content: 'Web search is now available. Use it if current public information is needed.' });
       }
       if (!response) throw new Error('The assistant could not respond.');
+      const invalidDeletion = response.proposals?.some((proposal) => {
+        if (proposal.kind !== 'calendar.delete' && proposal.kind !== 'task.delete') return false;
+        const event = proposal.kind === 'calendar.delete';
+        const id = event ? proposal.payload.eventId : proposal.payload.taskId;
+        return typeof id !== 'string' || !context.some((item) => item.id === id && item.type === (event ? 'calendar-event' : 'task'));
+      });
+      if (invalidDeletion) throw new Error('La IA debe consultar el evento o recordatorio exacto antes de proponer su eliminación.');
       const uninspectedFileChange = response.proposals?.some((proposal) => {
         if (proposal.kind !== 'file.update' && proposal.kind !== 'file.block.create' && proposal.kind !== 'file.block.delete') return false;
         const noteId = proposal.payload.noteId;
@@ -307,6 +314,12 @@ export function AIChat({ global = false, compact = false, home = false }: AIChat
         state.appendChatMessage(sendingThreadId, newChatMessage('assistant', response.text, [...sourceLinks.values()]));
         if (profileUpdates.length && useWorkspace.getState().personalProfile.updatedAt === profileAtSend.updatedAt) state.applyProfileUpdates(profileUpdates);
         if (response.proposals?.length) state.enqueueProposals(response.proposals.map((proposal) => {
+          if (proposal.kind === 'calendar.delete' || proposal.kind === 'task.delete') {
+            const event = proposal.kind === 'calendar.delete';
+            const target = event ? data.calendarEvents.find((item) => item.id === proposal.payload.eventId) : data.tasks.find((item) => item.id === proposal.payload.taskId);
+            const date = target && ('start' in target ? target.start : target.due);
+            return { ...proposal, before: `${target?.title ?? ''}${date ? ` · ${new Date(date).toLocaleString()}` : ''}`, after: event ? 'Eliminar evento' : 'Eliminar recordatorio/tarea', payload: { ...proposal.payload, expected: JSON.stringify(target) }, id: crypto.randomUUID(), threadId: sendingThreadId, status: 'pending' as const, createdAt: Date.now() };
+          }
           const block = proposal.kind === 'file.block.delete' ? data.notes[proposal.payload.noteId as string]?.blocks.find((item) => item.id === proposal.payload.blockId) : undefined;
           return { ...proposal, ...(block ? { before: block.type === 'image' ? `[Image] ${block.caption ?? ''}` : block.content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160) || `[${block.type} block]`, after: 'Block deleted' } : {}), id: crypto.randomUUID(), threadId: sendingThreadId, status: 'pending' as const, createdAt: Date.now() };
         }));
@@ -374,7 +387,7 @@ export function AIChat({ global = false, compact = false, home = false }: AIChat
       {error?.threadId === threadId && <div className="ai-error"><Settings size={16} /><span>{error.message}</span>{error.retryContent && !error.settings && <button onClick={() => void send(error.retryContent, true)}>Reintentar</button>}{error.settings && <button onClick={() => state.setActiveView('settings')}>Open settings</button>}{error.quota && <>{compact && <button onClick={() => setModelMenuOpen(true)}>Cambiar modelo</button>}<a href="https://ai.dev/rate-limit" target="_blank" rel="noopener noreferrer">Ver cuota</a></>}</div>}
       {pending.length > 0 && <div className="proposal-queue"><div className="proposal-heading"><span>First proposal</span><span>{pending.length} pending</span></div>
         <div className="proposal"><strong>{pending[0].title}</strong><p>{pending[0].description}</p>{pending[0].before && <div className="diff-row removed">− {pending[0].before}</div>}<div className="diff-row added">+ {pending[0].after}</div>
-          <div className="proposal-actions"><button onClick={() => state.resolveProposal(pending[0].id, 'rejected')}>Reject</button>{pending[0].kind !== 'file.block.delete' && <button onClick={() => modify(pending[0].id, pending[0].after)}><Pencil size={13} /> Modify</button>}<button className="primary" onClick={() => state.resolveProposal(pending[0].id, 'approved')}><Check size={14} /> Approve</button></div>
+          <div className="proposal-actions"><button onClick={() => state.resolveProposal(pending[0].id, 'rejected')}>Reject</button>{!['file.block.delete', 'calendar.delete', 'task.delete'].includes(pending[0].kind) && <button onClick={() => modify(pending[0].id, pending[0].after)}><Pencil size={13} /> Modify</button>}<button className="primary" onClick={() => { state.resolveProposal(pending[0].id, 'approved'); if (['calendar.delete', 'task.delete'].includes(pending[0].kind) && useWorkspace.getState().pendingProposals.find((item) => item.id === pending[0].id)?.status === 'pending') setError({ threadId, message: 'Este elemento cambió o ya no existe. Rechaza la propuesta y pide a la IA que lo consulte de nuevo.' }); }}><Check size={14} /> Approve</button></div>
         </div>{pending.length > 1 && <small>The next proposal appears after this one is reviewed. You can keep asking questions meanwhile.</small>}</div>}
       {global && messages.length === 0 && !compact && <div className="prompt-suggestions"><button onClick={() => void send('When is my next exam?')}><CalendarDays size={15} />When is my next exam?</button><button onClick={() => void send('What did I train last week?')}><Dumbbell size={15} />What did I train last week?</button><button onClick={() => void send('Summarize my recent university notes')}><FileText size={15} />Summarize recent notes</button></div>}
     </div>

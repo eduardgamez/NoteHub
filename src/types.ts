@@ -137,7 +137,7 @@ export type ProfileField = 'classes' | 'routines' | 'events' | 'style' | 'backgr
 export interface PersonalProfile { answers: Partial<Record<ProfileField, string>>; notes: string; updatedAt: number }
 export interface ProfileUpdate { field: ProfileField | 'notes'; value: string; replace?: Array<{ field: ProfileField | 'notes'; value: string }> }
 export interface ChatSession { id: string; scope: string; title: string; createdAt: number; updatedAt: number; model?: string; profileSummary?: string; profileReadAt?: number }
-export type ProposalKind = 'context.update' | 'calendar.create' | 'task.create' | 'file.update' | 'file.block.create' | 'file.block.delete' | 'file.create';
+export type ProposalKind = 'context.update' | 'calendar.create' | 'calendar.delete' | 'task.create' | 'task.delete' | 'file.update' | 'file.block.create' | 'file.block.delete' | 'file.create';
 export interface PendingProposal {
   id: string;
   threadId: string;

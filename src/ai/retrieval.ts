@@ -33,7 +33,7 @@ export function retrieveWorkspaceContext(query: string, data: WorkspaceStateData
 
   if (!options.projectId) {
     if (!permissions || permissions.inspectCalendar) data.calendarEvents.filter((event) => score(event.title, queryTerms) > 0 || /calendar|free|available|when|study|exam/i.test(query)).slice(0, 12).forEach((event) => context.push({ id: event.id, type: 'calendar-event', content: `${event.title}: ${event.start}–${event.end}` }));
-    data.tasks.filter((task) => score(task.title, queryTerms) > 0 || /task|remind|checklist|todo/i.test(query)).slice(0, 12).forEach((task) => context.push({ id: task.id, type: 'task', content: `${task.done ? 'Done' : 'Open'}: ${task.title}${task.due ? ` · due ${task.due}` : ''}` }));
+    data.tasks.filter((task) => score(task.title, queryTerms) > 0 || /task|remind|checklist|todo/i.test(query)).slice(0, 12).forEach((task) => context.push({ id: task.id, type: 'task', content: `${task.reminder ? 'Reminder' : 'Task'} · ${task.done ? 'Done' : 'Open'}: ${task.title}${task.due ? ` · due ${task.due}` : ''}` }));
     if ((!permissions || permissions.inspectGym) && /gym|workout|train|press|row|calf|weight|exercise|progress/i.test(query)) data.workouts.slice(-12).forEach((workout) => context.push({ id: workout.id, type: 'workout', content: `${workout.title} ${workout.startedAt}: ${workout.exercises.map((entry) => `${data.exercises.find((exercise) => exercise.id === entry.exerciseId)?.name}: ${entry.sets.map((set) => `${set.weight}kg×${set.reps} RIR${set.rir ?? '?'}`).join(', ')}`).join('; ')}` }));
   }
 
@@ -72,7 +72,7 @@ export function readWorkspaceSection(data: WorkspaceStateData, section: Workspac
   if (section === 'tasks') {
     const tasks = data.tasks.filter((task) => inProject(task.projectId));
     const matches = tasks.filter((task) => relevant(task.title));
-    (matches.length ? matches : tasks).slice(0, 40).forEach((task) => result.push({ id: task.id, type: 'task', content: `${task.done ? 'Done' : 'Open'}: ${task.title}${task.due ? ` · due ${task.due}` : ''}${task.checklist.length ? ` · checklist: ${task.checklist.map((item) => `${item.done ? '✓' : '○'} ${item.text}`).join('; ')}` : ''}` }));
+    (matches.length ? matches : tasks).slice(0, 40).forEach((task) => result.push({ id: task.id, type: 'task', content: `${task.reminder ? 'Reminder' : 'Task'} · ${task.done ? 'Done' : 'Open'}: ${task.title}${task.due ? ` · due ${task.due}` : ''}${task.checklist.length ? ` · checklist: ${task.checklist.map((item) => `${item.done ? '✓' : '○'} ${item.text}`).join('; ')}` : ''}` }));
   }
   if (section === 'gym' && options.permissions?.inspectGym !== false) {
     data.workouts.slice(-20).forEach((workout) => result.push({ id: workout.id, type: 'workout', content: `${workout.title} ${workout.startedAt}: ${workout.exercises.map((entry) => `${data.exercises.find((exercise) => exercise.id === entry.exerciseId)?.name ?? entry.exerciseId}: ${entry.sets.map((set) => `${set.weight}kg×${set.reps} RIR${set.rir ?? '?'}`).join(', ')}`).join('; ')}` }));

@@ -543,6 +543,14 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
         const { projectId, fieldId, label, value } = proposal.payload;
         if (typeof projectId === 'string' && typeof label === 'string' && typeof value === 'string') get().setContextItem(projectId, { id: typeof fieldId === 'string' ? fieldId : crypto.randomUUID(), label, value });
       }
+      if (proposal.kind === 'calendar.delete' || proposal.kind === 'task.delete') {
+        const event = proposal.kind === 'calendar.delete';
+        const targetId = event ? proposal.payload.eventId : proposal.payload.taskId;
+        const target = event ? get().calendarEvents.find((item) => item.id === targetId) : get().tasks.find((item) => item.id === targetId);
+        if (typeof targetId !== 'string' || !target) return;
+        if (typeof proposal.payload.expected === 'string' && proposal.payload.expected !== JSON.stringify(target)) return;
+        if (event) get().removeEvent(targetId); else get().removeTask(targetId);
+      }
       if (proposal.kind === 'calendar.create') {
         const { title, start, end, projectId } = proposal.payload;
         if (typeof title === 'string' && typeof start === 'string' && typeof end === 'string') get().addEvent({ id: crypto.randomUUID(), title, start, end, projectId: typeof projectId === 'string' ? projectId : undefined, color: 'green' });
