@@ -1,3 +1,4 @@
+import { deletionSnapshotMatches, deletionSnapshotHasId } from '../ai/deletionProposal';
 import { create } from 'zustand';
 import { seedWorkspace } from '../data/seed';
 import { loadWorkspace, scheduleSave } from '../lib/storage';
@@ -88,7 +89,7 @@ interface WorkspaceStore extends WorkspaceStateData {
   setProfileField: (field: ProfileField | 'notes', value: string) => void;
   applyProfileUpdates: (updates: ProfileUpdate[]) => void;
   enqueueProposals: (proposals: PendingProposal[]) => void;
-  updateProposal: (id: string, changes: Partial<Pick<PendingProposal, 'title' | 'description' | 'after' | 'payload'>>) => void;
+  updateProposal: (id: string, changes: Partial<Pick<PendingProposal, 'title' | 'description' | 'before' | 'after' | 'payload'>>) => void;
   resolveProposal: (id: string, resolution: 'approved' | 'rejected') => void;
   hydrate: () => Promise<void>;
   applyRemote: (operation: SyncOperation) => void;
@@ -557,9 +558,14 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
         const event = proposal.kind === 'calendar.delete';
         const targetId = event ? proposal.payload.eventId : proposal.payload.taskId;
         const target = event ? get().calendarEvents.find((item) => item.id === targetId) : get().tasks.find((item) => item.id === targetId);
-        if (typeof targetId !== 'string' || !target) return;
-        if (typeof proposal.payload.expected === 'string' && proposal.payload.expected !== JSON.stringify(target)) return;
-        if (event) get().removeEvent(targetId); else get().removeTask(targetId);
+        if (typeof targetId !== 'string') return;
+        if (!target) {
+          // The requested deletion has already happened; finish this proposal without touching another item.
+          if (!deletionSnapshotHasId(proposal.payload.expected, targetId)) return;
+        } else {
+          if (typeof proposal.payload.expected === 'string' && !deletionSnapshotMatches(proposal.payload.expected, target)) return;
+          if (event) get().removeEvent(targetId); else get().removeTask(targetId);
+        }
       }
       if (proposal.kind === 'calendar.create') {
         const { title, start, end, projectId } = proposal.payload;

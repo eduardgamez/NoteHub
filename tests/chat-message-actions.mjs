@@ -53,5 +53,17 @@ try {
  await page.mouse.move(scrollArea.x + 3, scrollArea.y + scrollArea.height / 2);
  await page.mouse.wheel(0, 200);
  await page.waitForFunction(() => document.querySelector('.home-ai .ai-thread').scrollTop > 0);
+ await page.evaluate(async (threadId) => {
+  const { useWorkspace } = await import('/src/store/useWorkspace.ts');
+  const old = { id: 'changed-event', title: 'Evento original', start: '2026-10-02T09:00:00Z', end: '2026-10-02T10:00:00Z', color: 'green' };
+  useWorkspace.setState({ calendarEvents: [{ ...old, title: 'Evento actualizado' }], pendingProposals: [{ id: 'review-delete', threadId, kind: 'calendar.delete', title: 'Eliminar evento', description: 'Propuesta anterior', before: old.title, after: 'Eliminar evento', payload: { eventId: old.id, expected: JSON.stringify(old) }, status: 'pending', createdAt: 1 }] });
+ }, threadId);
+ await page.getByRole('button', { name: 'Approve', exact: true }).click();
+ await page.getByRole('button', { name: 'Revisar datos actuales', exact: true }).click();
+ await page.locator('.proposal-queue .diff-row.removed').filter({ hasText: 'Evento actualizado' }).waitFor();
+ assert.equal(await page.locator('.ai-error').count(), 0);
+ await page.getByRole('button', { name: 'Approve', exact: true }).click();
+ assert.equal(await page.locator('.proposal-queue').count(), 0);
+ assert.equal(await page.evaluate(async () => { const { useWorkspace } = await import('/src/store/useWorkspace.ts'); return useWorkspace.getState().calendarEvents.length; }), 0);
  console.log('Chat actions passed: delete one unanswered message, retry earlier message, trim later messages, preserve history and attachments.');
 } finally { await browser?.close(); server.kill('SIGTERM'); }

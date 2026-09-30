@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export interface ChatRunError { threadId: string; message: string; settings?: boolean; quota?: boolean; retryContent?: string }
+export interface ChatRunError { threadId: string; message: string; settings?: boolean; quota?: boolean; retryContent?: string; proposalId?: string }
 interface ChatRun { running: boolean; progress: string[]; error?: ChatRunError }
 // Lives outside panels: navigating or closing a panel does not cancel its active request.
 export const useChatRuns = create<{ runs: Record<string, ChatRun> }>(() => ({ runs: {} }));

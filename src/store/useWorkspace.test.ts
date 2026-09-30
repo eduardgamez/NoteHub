@@ -176,6 +176,20 @@ describe('AI event and reminder deletion', () => {
     expect(useWorkspace.getState().pendingProposals.every((item) => item.status === 'approved')).toBe(true);
   });
 
+  it('does not mistake reordered object properties for a changed event', () => {
+    useWorkspace.setState({ calendarEvents: [{ color: event.color, end: event.end, start: event.start, title: event.title, id: event.id }] });
+    useWorkspace.getState().resolveProposal('calendar.delete', 'approved');
+    expect(useWorkspace.getState().calendarEvents).toHaveLength(0);
+    expect(useWorkspace.getState().pendingProposals[0].status).toBe('approved');
+  });
+
+  it('finishes an already satisfied deletion without removing a different event', () => {
+    useWorkspace.getState().removeEvent(event.id);
+    useWorkspace.getState().resolveProposal('calendar.delete', 'approved');
+    expect(useWorkspace.getState().calendarEvents.map((item) => item.id)).toEqual(['other-event']);
+    expect(useWorkspace.getState().pendingProposals[0].status).toBe('approved');
+  });
+
   it('keeps rejected events and reminders', () => {
     useWorkspace.getState().resolveProposal('calendar.delete', 'rejected');
     useWorkspace.getState().resolveProposal('task.delete', 'rejected');
