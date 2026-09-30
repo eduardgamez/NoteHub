@@ -13,6 +13,10 @@ try {
   try { await page.goto('http://127.0.0.1:5186'); break; } catch (error) { if (attempt >= 20) throw error; await new Promise((resolve) => setTimeout(resolve, 250)); }
  }
  await page.locator('.project-tile').first().waitFor();
+ const panel = await page.locator('.home-ai').boundingBox();
+ const scrollArea = await page.locator('.home-ai .ai-thread').boundingBox();
+ assert.ok(Math.abs(panel.width - scrollArea.width) < 2);
+
  const threadId = await page.evaluate(async () => {
   const { useWorkspace } = await import('/src/store/useWorkspace.ts');
   const store = useWorkspace.getState(); const id = store.createChatSession('global');
@@ -23,7 +27,13 @@ try {
  });
  assert.equal(await page.locator('.chat-message-actions').count(), 2);
  const second = page.locator('.message.user').filter({ hasText: 'dale' });
- await second.hover(); await second.getByRole('button', { name: 'Eliminar mensaje', exact: true }).click();
+ await second.hover();
+ const bubble = await second.boundingBox();
+ const trash = await second.getByRole('button', { name: 'Eliminar mensaje', exact: true }).boundingBox();
+ const retry = await second.getByRole('button', { name: 'Reintentar desde este mensaje', exact: true }).boundingBox();
+ assert.ok(trash.x >= bubble.x + bubble.width);
+ assert.ok(retry.y >= trash.y + trash.height);
+ await second.getByRole('button', { name: 'Eliminar mensaje', exact: true }).click();
  assert.equal(await page.locator('.message.user').filter({ hasText: 'dale' }).count(), 0);
  assert.equal(await page.locator('.message.user').filter({ hasText: 'Revisa todo' }).count(), 1);
  assert.equal(await page.getByRole('button', { name: 'Eliminar mensaje', exact: true }).count(), 0);
@@ -38,5 +48,10 @@ try {
  assert.deepEqual(requests[0].messages.map((message) => message.content), ['Pregunta antigua', 'Respuesta anterior', 'Revisa todo']);
  assert.ok(requests[0].context.some((item) => item.content.includes('Datos adjuntos importantes')));
  assert.equal(await page.locator('.message.user').filter({ hasText: 'Revisa todo' }).count(), 1);
+ await page.locator('.home-ai .ai-thread-content').evaluate((element) => { const spacer = document.createElement('div'); spacer.style.height = '2000px'; element.prepend(spacer); });
+ await page.locator('.home-ai .ai-thread').evaluate((element) => { element.scrollTop = 0; });
+ await page.mouse.move(scrollArea.x + 3, scrollArea.y + scrollArea.height / 2);
+ await page.mouse.wheel(0, 200);
+ await page.waitForFunction(() => document.querySelector('.home-ai .ai-thread').scrollTop > 0);
  console.log('Chat actions passed: delete one unanswered message, retry earlier message, trim later messages, preserve history and attachments.');
 } finally { await browser?.close(); server.kill('SIGTERM'); }
