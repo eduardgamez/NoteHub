@@ -52,3 +52,23 @@ describe('event task lists', () => {
     expect(useWorkspace.getState().calendarEvents.at(-1)?.checklist?.map((item) => [item.text, item.done])).toEqual([['First task', false], ['Second task', false]]);
   });
 });
+
+describe('reminder clock placement', () => {
+  it('aligns equal times across days, respects minutes and separates simultaneous bells horizontally', () => {
+    const monday = new Date(); monday.setDate(monday.getDate() - (monday.getDay() + 6) % 7); monday.setHours(9, 15, 0, 0);
+    const tuesday = new Date(monday); tuesday.setDate(tuesday.getDate() + 1);
+    const earlier = new Date(monday); earlier.setHours(8, 30);
+    const later = new Date(monday); later.setMinutes(45);
+    const reminder = (id: string, due: Date) => ({ id, title: id, due: due.toISOString(), done: false, reminder: true, checklist: [] });
+    useWorkspace.setState({ tasks: [reminder('earlier', earlier), reminder('Monday', monday), reminder('Tuesday', tuesday), reminder('same time', monday), reminder('later', later)] });
+    render(<CalendarView />);
+    const left = screen.getByRole('button', { name: 'Reminder: Monday' });
+    const right = screen.getByRole('button', { name: 'Reminder: Tuesday' });
+    const simultaneous = screen.getByRole('button', { name: 'Reminder: same time' });
+    expect(left.style.top).toBeTruthy();
+    expect(left.style.top).toBe(right.style.top);
+    expect(left.style.top).toBe(simultaneous.style.top);
+    expect(left.style.left).not.toBe(simultaneous.style.left);
+    expect(left.style.top).not.toBe(screen.getByRole('button', { name: 'Reminder: later' }).style.top);
+  });
+});

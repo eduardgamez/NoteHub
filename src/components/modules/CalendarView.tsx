@@ -155,10 +155,13 @@ export function CalendarView() {
           const height = `max(22px, ${(eventEnd.getTime() - eventStart.getTime()) / 3600000 / hours.length * 100}%)`;
           return <button key={event.id} className={`calendar-event ${event.color}`} style={{ top, height }} onClick={(click) => openEvent(event, click.currentTarget)} onDoubleClick={() => { removeEvent(event.id); setSelectedEvent(null); }} aria-label={`Event: ${event.title}`} title="Click to manage; double-click to delete"><strong>{event.title}</strong><EventProgress event={event} /><span><Clock3 size={10} /> {eventStart.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></button>;
         })}
-        {datedTasks.filter((task) => sameDay(new Date(task.due!), day)).map((task, index) => {
+        {datedTasks.filter((task) => sameDay(new Date(task.due!), day)).map((task, index, dayTasks) => {
           const date = new Date(task.due!);
-          const top = `clamp(2px, calc(${((date.getHours() - 8 + 0.5) / hours.length) * 100}% - 9.5px + ${index * 22}px), calc(100% - 20px))`;
-          return <button key={task.id} className={`calendar-reminder ${task.done ? 'done' : ''}`} style={{ top }} onMouseEnter={(event) => showReminderTooltip(task, event.currentTarget)} onMouseLeave={() => setHoveredReminder(null)} onFocus={(event) => showReminderTooltip(task, event.currentTarget)} onBlur={() => setHoveredReminder(null)} onClick={(event) => { setHoveredReminder(null); openTask(task, event.currentTarget); }} aria-label={`Reminder: ${task.title}`}><Bell size={13} fill="currentColor" /></button>;
+          const minute = date.getHours() * 60 + date.getMinutes();
+          const lane = dayTasks.slice(0, index).filter((item) => { const due = new Date(item.due!); return due.getHours() * 60 + due.getMinutes() === minute; }).length;
+          const top = `clamp(2px, calc(${((minute / 60 - 8) / hours.length) * 100}% - 9.5px), calc(100% - 20px))`;
+          const left = `min(${5 + lane * 21}px, calc(100% - 20px))`;
+          return <button key={task.id} className={`calendar-reminder ${task.done ? 'done' : ''}`} style={{ top, left }} onMouseEnter={(event) => showReminderTooltip(task, event.currentTarget)} onMouseLeave={() => setHoveredReminder(null)} onFocus={(event) => showReminderTooltip(task, event.currentTarget)} onBlur={() => setHoveredReminder(null)} onClick={(event) => { setHoveredReminder(null); openTask(task, event.currentTarget); }} aria-label={`Reminder: ${task.title}`}><Bell size={13} fill="currentColor" /></button>;
         })}
       </div>)}
     </div>}
