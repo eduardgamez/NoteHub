@@ -87,3 +87,61 @@ describe('personal profile in chats', () => {
     expect(useWorkspace.getState().personalProfile.answers.classes).toBe('');
   });
 });
+
+describe('block layout mutations and device replay', () => {
+  beforeEach(() => useWorkspace.setState({ ...structuredClone(seedWorkspace), activeNoteId: 'sensitivity', history: {}, future: {} }));
+
+  it('replays insertion with exactly the same row membership as local insertion', () => {
+    const initial = structuredClone(useWorkspace.getState().notes.sensitivity);
+    const target = initial.blocks.find((block) => !block.isTitle)!;
+    const added = { ...target, id: 'new-block', layoutGroupId: undefined, layoutColumnId: undefined };
+    useWorkspace.getState().insertBlockAfter(initial.id, added, target.id);
+    const expected = structuredClone(useWorkspace.getState().notes.sensitivity.blocks);
+    useWorkspace.setState({ notes: { ...useWorkspace.getState().notes, sensitivity: initial }, history: {} });
+    useWorkspace.getState().applyRemote({ kind: 'block.upsert', noteId: initial.id, block: added, afterBlockId: target.id, opId: 'insert', source: 'other-device', timestamp: 1 });
+    expect(useWorkspace.getState().notes.sensitivity.blocks).toEqual(expected);
+    expect(useWorkspace.getState().history.sensitivity).toBeUndefined();
+  });
+
+  it('replays column moves with the same layout on another device', () => {
+    const initial = structuredClone(useWorkspace.getState().notes.sensitivity);
+    const [target, source] = initial.blocks.filter((block) => !block.isTitle);
+    useWorkspace.getState().reorderBlock(initial.id, source.id, target.id, false, true);
+    const expected = structuredClone(useWorkspace.getState().notes.sensitivity.blocks);
+    useWorkspace.setState({ notes: { ...useWorkspace.getState().notes, sensitivity: initial }, history: {} });
+    useWorkspace.getState().applyRemote({ kind: 'block.reorder', noteId: initial.id, blockId: source.id, targetId: target.id, before: false, side: true, source: 'other-device', opId: 'move', timestamp: 1 });
+    expect(useWorkspace.getState().notes.sensitivity.blocks).toEqual(expected);
+    expect(useWorkspace.getState().history.sensitivity).toBeUndefined();
+  });
+
+  it('keeps attached ink and supports undo/redo when moving beside a drawing', () => {
+    const store = useWorkspace.getState();
+    const initial = structuredClone(store.notes.sensitivity);
+    const target = initial.blocks.find((block) => !block.isTitle)!;
+    const source = initial.blocks.find((block) => !block.isTitle && block.id !== target.id)!;
+    store.reorderBlock(initial.id, source.id, target.id, false, true);
+    const moved = structuredClone(useWorkspace.getState().notes.sensitivity);
+    expect(moved.blocks.find((block) => block.id === source.id)?.layoutGroupId).toBe(target.layoutGroupId ?? target.id);
+    expect(moved.strokes).toEqual(initial.strokes);
+    store.undo(initial.id);
+    expect(useWorkspace.getState().notes.sensitivity).toEqual(initial);
+    store.redo(initial.id);
+    expect(useWorkspace.getState().notes.sensitivity).toEqual(moved);
+  });
+});
+
+describe('mobile project panels', () => {
+  it('opens one overlay at a time on narrow screens, retaining desktop side-by-side panels', () => {
+    const width = window.innerWidth;
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 375 });
+    useWorkspace.setState({ aiOpen: true, sidebarOpen: false });
+    useWorkspace.getState().setSidebarOpen(true);
+    expect(useWorkspace.getState()).toMatchObject({ sidebarOpen: true, aiOpen: false });
+    useWorkspace.getState().setAiOpen(true);
+    expect(useWorkspace.getState()).toMatchObject({ sidebarOpen: false, aiOpen: true });
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });
+    useWorkspace.getState().setSidebarOpen(true);
+    expect(useWorkspace.getState()).toMatchObject({ sidebarOpen: true, aiOpen: true });
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
+  });
+});

@@ -303,7 +303,7 @@ export const BlockCard = memo(function BlockCard({ block, zoom, selected, active
     {block.type === 'image' && <figure className="image-block"><img src={block.content} alt={(block.captionRichText ? block.caption?.replace(/<[^>]+>/g, ' ') : block.caption) || 'Workspace upload'} /><figcaption contentEditable suppressContentEditableWarning onBlur={(event) => updateCurrent({ caption: event.currentTarget.innerHTML, captionRichText: true }, true)} dangerouslySetInnerHTML={{ __html: block.caption ? block.captionRichText ? block.caption : escapeHtml(block.caption) : 'Add a caption…' }} /></figure>}
 
     {block.type === 'checklist' && <Checklist block={block} onChange={updateContent} />}
-    {block.type === 'table' && <TableBlock block={block} />}
+    {block.type === 'table' && <TableBlock block={block} zoom={zoom} />}
     {block.type === 'drawing' && <div className="drawing-space" />}
 
     <button className="resize-handle" aria-label={block.type === 'drawing' ? 'Resize drawing height' : 'Resize block'} title={block.type === 'drawing' ? 'Drag to change drawing height' : 'Resize block'} onPointerDown={(event) => startAction(event, 'resize')} onPointerMove={moveAction} onPointerUp={endAction} />
@@ -332,7 +332,7 @@ function Checklist({ block, onChange }: { block: CanvasBlock; onChange: (value: 
   </div>;
 }
 
-function TableBlock({ block }: { block: CanvasBlock }) {
+function TableBlock({ block, zoom }: { block: CanvasBlock; zoom: number }) {
   const activeNoteId = useWorkspace((state) => state.activeNoteId);
   const upsertBlock = useWorkspace((state) => state.upsertBlock);
   const checkpoint = useWorkspace((state) => state.checkpoint);
@@ -364,15 +364,15 @@ function TableBlock({ block }: { block: CanvasBlock }) {
     const table = tableRef.current;
     if (!table) return;
     const sizes = axis === 'column'
-      ? [...table.rows[0].cells].map((cell) => Math.round(cell.getBoundingClientRect().width))
-      : [...table.rows].map((row) => Math.round(row.getBoundingClientRect().height));
+      ? [...table.rows[0].cells].map((cell) => Math.round(cell.getBoundingClientRect().width / zoom))
+      : [...table.rows].map((row) => Math.round(row.getBoundingClientRect().height / zoom));
     resizeRef.current = { axis, index, pointerId: event.pointerId, start: axis === 'column' ? event.clientX : event.clientY, sizes, changed: false };
     event.currentTarget.setPointerCapture(event.pointerId);
   };
   const moveResize = (event: React.PointerEvent<HTMLSpanElement>) => {
     const resize = resizeRef.current;
     if (!resize || resize.pointerId !== event.pointerId) return;
-    const delta = (resize.axis === 'column' ? event.clientX : event.clientY) - resize.start;
+    const delta = ((resize.axis === 'column' ? event.clientX : event.clientY) - resize.start) / zoom;
     if (Math.abs(delta) < 2 && !resize.changed) return;
     const size = Math.max(resize.axis === 'column' ? 60 : 28, Math.round(resize.sizes[resize.index] + delta));
     const sizes = event.shiftKey ? resize.sizes.map(() => size) : [...resize.sizes];
@@ -394,8 +394,8 @@ function TableBlock({ block }: { block: CanvasBlock }) {
     event.preventDefault();
     const current = currentBlock();
     const sizes = axis === 'column'
-      ? current.tableColumnWidths ?? [...tableRef.current.rows[0].cells].map((cell) => Math.round(cell.getBoundingClientRect().width))
-      : current.tableRowHeights ?? [...tableRef.current.rows].map((row) => Math.round(row.getBoundingClientRect().height));
+      ? current.tableColumnWidths ?? [...tableRef.current.rows[0].cells].map((cell) => Math.round(cell.getBoundingClientRect().width / zoom))
+      : current.tableRowHeights ?? [...tableRef.current.rows].map((row) => Math.round(row.getBoundingClientRect().height / zoom));
     const size = Math.max(axis === 'column' ? 60 : 28, sizes[index] + direction * (event.shiftKey ? 10 : 5));
     const next = event.shiftKey ? sizes.map(() => size) : [...sizes];
     next[index] = size;

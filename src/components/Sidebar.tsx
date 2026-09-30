@@ -108,7 +108,7 @@ export function Sidebar() {
     event.preventDefault();
     showMenu('blank', undefined, event.clientX + 6, event.clientY);
   }}>
-    <div className="project-sidebar-heading"><button aria-label="Back to home" onClick={() => { setActiveView('calendar'); setAiOpen(false); }}><ArrowLeft size={19} /></button><strong>PROJECTS</strong><button type="button" aria-label="Close project explorer" title="Close project explorer" onClick={() => setSidebarOpen(false)}><X size={18} /></button></div>
+    <div className="project-sidebar-heading"><button aria-label="Back to home" onClick={() => { setActiveView('calendar'); setAiOpen(false); }}><ArrowLeft size={19} /></button><strong>PROJECTS</strong><button type="button" className="project-sidebar-close" aria-label="Close project explorer" title="Close project explorer" onClick={() => setSidebarOpen(false)}><X size={17} /></button></div>
     {project ? <div className="project-tree"><div className="project-tree-root"><span>{project.emoji}</span><strong>{project.title}</strong></div>
       <div className="project-tree-children">{folders.filter((folder) => !folder.parentId || !folders.some((parent) => parent.id === folder.parentId)).map(folderRow)}{notes.filter((note) => !note.folderId || !folders.some((folder) => folder.id === note.folderId)).map(noteRow)}{newItem()}</div>
     </div> : <p className="project-tree-empty">Project not found.</p>}

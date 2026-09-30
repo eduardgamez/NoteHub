@@ -24,6 +24,8 @@ Transient UI state (active view, canvas tool, selection, undo stacks) is not per
 
 ## Canvas and ink
 
+The document view uses a fixed 850 CSS-pixel page with consistent padding on all screen sizes. Documents with at most two columns per row shrink uniformly to the available width; documents with three or more columns in any row keep their natural size and allow horizontal scrolling. The scale applies to the page and its ink together, while measurement and pointer input remain in unscaled document coordinates. Column wrapping is determined by the canonical page width on every device. Rows and columns are resolved from stable layout IDs; moving blocks preserves the order of surviving rows, and removing a column redistributes its width among the remaining columns. Local insertions and remote operation replay use the same layout function. Block-relative ink keeps its shape and follows its anchor as blocks move.
+
 Blocks and strokes use world-space coordinates independent from the camera transform. Pointer coordinates are converted to world space before mutations. A tile-based spatial index queries the viewport plus a 400-world-unit preload margin, so off-screen DOM blocks and SVG paths are not mounted. Block components are memoized and drag/resize only publishes the final operation.
 
 Ink is a separate SVG layer over all blocks. Strokes retain pressure and precalculated bounds, enabling hit-tested erasure and the same spatial culling as blocks. Undo snapshots the current note before a logical action; drag and resize create one history item instead of one per pointer move.

@@ -5,10 +5,11 @@ import { useWorkspace } from '../store/useWorkspace';
 import { captureTextSelection } from '../ai/textSelection';
 import type { AITextSelection, BlockType, CanvasBlock, Point } from '../types';
 import { makeBlock } from '../lib/blockFactory';
+import { blockRows, findBlockDrop } from '../lib/blockLayout';
 import { BlockCard } from './BlockCard';
 import { CanvasToolbar } from './CanvasToolbar';
 import { InkLayer } from './InkLayer';
-import { projectStroke, readDocumentLayout, strokeIntersectsRect, type DocumentLayout, type DocumentRect } from '../lib/documentInk';
+import { DOCUMENT_WIDTH, documentPoint, fitDocumentScale, projectStroke, readDocumentLayout, strokeIntersectsRect, type DocumentLayout, type DocumentRect } from '../lib/documentInk';
 
 function selectionRect(start: Point, end: Point): DocumentRect {
   return { x: Math.min(start.x, end.x), y: Math.min(start.y, end.y), width: Math.abs(end.x - start.x), height: Math.abs(end.y - start.y) };
@@ -28,9 +29,14 @@ export function CanvasWorkspace() {
   const [selectedStrokeIds, setSelectedStrokeIds] = useState<string[]>([]);
   const [inkMove, setInkMove] = useState<{ ids: string[]; dx: number; dy: number } | null>(null);
   const [layout, setLayout] = useState<DocumentLayout>({});
+  const [availableWidth, setAvailableWidth] = useState(0);
+  const [pageHeight, setPageHeight] = useState(0);
   const [contentWidth, setContentWidth] = useState(0);
   const [crossTextPosition, setCrossTextPosition] = useState<{ left: number; top: number } | null>(null);
   const note = useWorkspace((state) => state.notes[state.activeNoteId]);
+  const rows = blockRows(note.blocks);
+  const maxColumns = Math.max(1, ...rows.map((row) => row.columns.length));
+  const documentZoom = fitDocumentScale(availableWidth, maxColumns);
   const selectedIds = useWorkspace((state) => state.selectedIds);
   const activeBlockId = useWorkspace((state) => state.activeBlockId);
   const setActiveBlockId = useWorkspace((state) => state.setActiveBlockId);
@@ -48,7 +54,7 @@ export function CanvasWorkspace() {
   const redo = useWorkspace((state) => state.redo);
   const moveStrokes = useWorkspace((state) => state.moveStrokes);
 
-  useEffect(() => { setSelectedStrokeIds([]); setMarquee(null); setInkMove(null); marqueeRef.current = null; inkMoveRef.current = null; }, [note.id]);
+  useEffect(() => { setSelectedStrokeIds([]); setMarquee(null); setInkMove(null); marqueeRef.current = null; inkMoveRef.current = null; dragRef.current = null; setDropTarget(null); }, [note.id]);
 
   useEffect(() => {
     if (tool !== 'ink') return;
@@ -97,15 +103,23 @@ export function CanvasWorkspace() {
     if (!page) return;
     const measure = () => {
       setLayout(readDocumentLayout(page));
+      setPageHeight((previous) => previous === page.offsetHeight ? previous : page.offsetHeight);
+      const viewport = viewportRef.current;
+      if (viewport) {
+        const style = getComputedStyle(viewport);
+        const available = viewport.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+        setAvailableWidth((previous) => previous === available ? previous : available);
+      }
       const width = page.querySelector<HTMLElement>('.document-blocks')?.clientWidth ?? 0;
       setContentWidth((previous) => previous === width ? previous : width);
     };
     const observer = new ResizeObserver(measure);
     observer.observe(page);
+    if (viewportRef.current) observer.observe(viewportRef.current);
     page.querySelectorAll<HTMLElement>('[data-block-id]').forEach((element) => observer.observe(element));
     measure();
     return () => observer.disconnect();
-  }, [note.id, note.blocks]);
+  }, [note.id, note.blocks, documentZoom]);
 
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
@@ -142,8 +156,8 @@ export function CanvasWorkspace() {
   }
 
   const toPage = useCallback((clientX: number, clientY: number): Point => {
-    const rect = pageRef.current?.getBoundingClientRect();
-    return { x: clientX - (rect?.left ?? 0), y: clientY - (rect?.top ?? 0) };
+    const page = pageRef.current;
+    return page ? documentPoint(page, clientX, clientY) : { x: 0, y: 0 };
   }, []);
   const askAI = useCallback((selection?: AITextSelection) => {
     setAiTextSelection(selection ?? null);
@@ -165,31 +179,20 @@ export function CanvasWorkspace() {
     const viewport = page.closest<HTMLElement>('.document-viewport');
     const horizontalBounds = (viewport ?? page).getBoundingClientRect();
     if (clientX < horizontalBounds.left || clientX > horizontalBounds.right) { setDropTarget(null); drag.targetId = undefined; return; }
-    const candidates = [...page.querySelectorAll<HTMLElement>('.document-block-column > [data-block-id]')].filter((element) => element.dataset.blockId !== blockId);
-    if (!candidates.length) return;
-    const distance = (element: HTMLElement) => {
+    const candidates = [...page.querySelectorAll<HTMLElement>('.document-block-column > [data-block-id]')].map((element) => {
       const rect = element.getBoundingClientRect();
-      const horizontalGap = Math.max(rect.left - clientX, 0, clientX - rect.right);
-      const verticalGap = Math.max(rect.top - clientY, 0, clientY - rect.bottom);
-      return { verticalGap, horizontalGap };
-    };
-    const target = candidates.reduce((closest, element) => {
-      const next = distance(element);
-      const current = distance(closest);
-      return next.verticalGap < current.verticalGap || (next.verticalGap === current.verticalGap && next.horizontalGap < current.horizontalGap) ? element : closest;
+      return { id: element.dataset.blockId!, rowId: element.closest<HTMLElement>('.document-block-row')!.dataset.rowId!, title: element.classList.contains('title-block'), drawing: element.classList.contains('type-drawing'), left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
     });
-    const bounds = target.getBoundingClientRect();
-    const drawingTarget = target.classList.contains('type-drawing');
-    const sideMargin = drawingTarget ? 48 : 34;
-    const sideZone = drawingTarget ? .38 : .24;
-    const side = !target.classList.contains('title-block') && clientY >= bounds.top - sideMargin && clientY <= bounds.bottom + sideMargin && (clientX < bounds.left + bounds.width * sideZone || clientX > bounds.right - bounds.width * sideZone);
-    const before = side ? clientX < bounds.left + bounds.width / 2 : clientY < bounds.top + bounds.height / 2;
-    drag.targetId = target.dataset.blockId;
-    drag.before = before;
-    drag.side = side;
-    setDropTarget((previous) => previous?.blockId === blockId && previous.targetId === drag.targetId && previous.before === before && previous.side === side ? previous : { blockId, targetId: drag.targetId!, before, side });
+    const drop = findBlockDrop(candidates.filter((item) => item.id !== blockId), clientX, clientY);
+    if (!drop) { setDropTarget(null); drag.targetId = undefined; return; }
+    drag.targetId = drop.targetId;
+    drag.before = drop.before;
+    drag.side = drop.side;
+    setDropTarget((previous) => previous?.blockId === blockId && previous.targetId === drop.targetId && previous.before === drop.before && previous.side === drop.side ? previous : { blockId, ...drop });
     if (viewport) {
       const edge = viewport.getBoundingClientRect();
+      if (clientX < edge.left + 40) viewport.scrollBy(-18, 0);
+      else if (clientX > edge.right - 40) viewport.scrollBy(18, 0);
       if (clientY < edge.top + 55) viewport.scrollBy(0, -18);
       else if (clientY > edge.bottom - 55) viewport.scrollBy(0, 18);
     }
@@ -204,21 +207,12 @@ export function CanvasWorkspace() {
   }, [dropTarget, moveReorder]);
   const endReorder = useCallback((blockId: string, cancel = false) => {
     const drag = dragRef.current;
+    if (!cancel && drag?.blockId === blockId) moveReorder(blockId, drag.clientX, drag.clientY);
     dragRef.current = null;
     setDropTarget(null);
     if (!cancel && drag?.blockId === blockId && drag.targetId) reorderBlock(note.id, blockId, drag.targetId, Boolean(drag.before), Boolean(drag.side));
-  }, [note.id, reorderBlock]);
+  }, [note.id, reorderBlock, moveReorder]);
 
-  const rows: { id: string; columns: { id: string; blocks: CanvasBlock[] }[] }[] = [];
-  for (const block of note.blocks) {
-    const groupId = block.layoutGroupId ?? block.id;
-    const columnId = block.layoutColumnId ?? block.id;
-    let row = rows.find((item) => item.id === groupId);
-    if (!row) { row = { id: groupId, columns: [] }; rows.push(row); }
-    let column = row.columns.find((item) => item.id === columnId);
-    if (!column) { column = { id: columnId, blocks: [] }; row.columns.push(column); }
-    column.blocks.push(block);
-  }
   const columnMinWidth = (blocks: CanvasBlock[]) => Math.min(contentWidth || 734, Math.max(160, ...blocks.filter((block) => block.type === 'table').map((block) => (block.tableColumnWidths?.reduce((sum, width) => sum + width, 4) ?? (block.tableColumnCount ?? (() => { try { return JSON.parse(block.content)[0]?.length ?? 0; } catch { return 0; } })()) * 90 + 4) + 25)));
   const selectedStrokes = note.strokes.filter((stroke) => selectedStrokeIds.includes(stroke.id)).map((stroke) => projectStroke(stroke, note.blocks, layout)).filter((stroke) => stroke !== null);
   const strokeBox = selectedStrokes.length ? selectedStrokes.reduce<DocumentRect>((box, stroke) => {
@@ -229,7 +223,7 @@ export function CanvasWorkspace() {
     return { x, y, width: right - x, height: bottom - y };
   }, { ...selectedStrokes[0].bounds }) : null;
 
-  return <main className={`canvas-shell document-mode tool-${tool}`}>
+  return <main className={`canvas-shell document-mode tool-${tool} ${maxColumns >= 3 ? 'document-scrollable' : 'document-fitted'}`} data-document-scale={documentZoom}>
     <CanvasToolbar addBlock={addBlock} onImage={() => imageRef.current?.click()} />
     <input ref={imageRef} hidden type="file" accept="image/*" capture="environment" onChange={(event) => addImage(event.target.files?.[0])} />
     <div ref={viewportRef} className="document-viewport" onPointerDownCapture={(event) => {
@@ -280,21 +274,22 @@ export function CanvasWorkspace() {
       setMarquee(null);
       if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     }}>
-      <article ref={pageRef} className="document-page">
+      <div className="document-page-frame" style={{ width: DOCUMENT_WIDTH * documentZoom, height: pageHeight ? pageHeight * documentZoom : undefined }}>
+      <article ref={pageRef} className="document-page" style={{ transform: `scale(${documentZoom})` }}>
         <div className="document-blocks">
           {rows.map((row) => {
             const shouldWrap = contentWidth > 0 && row.columns.reduce((width, column) => width + columnMinWidth(column.blocks), 14 * (row.columns.length - 1)) > contentWidth;
             const wideTable = row.columns.some((column) => column.blocks.some((block) => block.type === 'table') && columnMinWidth(column.blocks) > contentWidth / 2);
             const columns = shouldWrap && wideTable ? [...row.columns].sort((a, b) => Number(b.blocks.some((block) => block.type === 'table')) - Number(a.blocks.some((block) => block.type === 'table'))) : row.columns;
-            return <div className="document-block-row" key={row.id}>
+            return <div className="document-block-row" data-row-id={row.id} key={row.id}>
             {columns.map((column) => <div className={`document-block-column ${column.blocks.some((block) => block.type === 'table') ? 'has-table' : ''}`} key={column.id} style={{ minWidth: columnMinWidth(column.blocks) }}>
-              {column.blocks.map((block) => <BlockCard key={block.id} block={block} zoom={1} selected={selectedIds.includes(block.id)} active={activeBlockId === block.id} onAskAI={askAI} onReorderStart={startReorder} onReorderMove={moveReorder} onReorderEnd={endReorder} reorderClass={`${dropTarget?.blockId === block.id ? 'is-reordering' : ''} ${dropTarget?.targetId === block.id ? dropTarget.side ? dropTarget.before ? 'drop-left' : 'drop-right' : dropTarget.before ? 'drop-before' : 'drop-after' : ''}`} />)}
+              {column.blocks.map((block) => <BlockCard key={block.id} block={block} zoom={documentZoom} selected={selectedIds.includes(block.id)} active={activeBlockId === block.id} onAskAI={askAI} onReorderStart={startReorder} onReorderMove={moveReorder} onReorderEnd={endReorder} reorderClass={`${dropTarget?.blockId === block.id ? 'is-reordering' : ''} ${dropTarget?.targetId === block.id ? dropTarget.side ? dropTarget.before ? 'drop-left' : 'drop-right' : dropTarget.before ? 'drop-before' : 'drop-after' : ''}`} />)}
             </div>)}
           </div>; })}
         </div>
         <InkLayer noteId={note.id} mode={tool} toWorld={toPage} layout={layout} moving={inkMove} />
         {marquee && <div className="ink-selection-marquee" style={{ left: marquee.x, top: marquee.y, width: marquee.width, height: marquee.height }} />}
-        {strokeBox && <div className={`ink-selection-box ${strokeBox.x + strokeBox.width + 34 > (pageRef.current?.clientWidth ?? 850) ? 'handle-left' : ''}`} role="group" aria-label="Selected drawing" style={{ left: strokeBox.x + (inkMove?.dx ?? 0), top: strokeBox.y + (inkMove?.dy ?? 0), width: strokeBox.width, height: strokeBox.height }}>
+        {strokeBox && <div className={`ink-selection-box ${strokeBox.x + strokeBox.width + 34 > DOCUMENT_WIDTH ? 'handle-left' : ''}`} role="group" aria-label="Selected drawing" style={{ left: strokeBox.x + (inkMove?.dx ?? 0), top: strokeBox.y + (inkMove?.dy ?? 0), width: strokeBox.width, height: strokeBox.height }}>
           <button type="button" className="ink-move-handle" aria-label="Move selected drawing" title="Move drawing" onPointerDown={(event) => {
             event.preventDefault();
             event.stopPropagation();
@@ -302,11 +297,11 @@ export function CanvasWorkspace() {
             event.currentTarget.setPointerCapture(event.pointerId);
           }} onPointerMove={(event) => {
             const move = inkMoveRef.current;
-            if (move?.pointerId === event.pointerId) setInkMove({ ids: move.ids, dx: Math.round(event.clientX - move.startX), dy: Math.round(event.clientY - move.startY) });
+            if (move?.pointerId === event.pointerId) setInkMove({ ids: move.ids, dx: Math.round((event.clientX - move.startX) / documentZoom), dy: Math.round((event.clientY - move.startY) / documentZoom) });
           }} onPointerUp={(event) => {
             const move = inkMoveRef.current;
             if (move?.pointerId !== event.pointerId) return;
-            moveStrokes(note.id, move.ids, Math.round(event.clientX - move.startX), Math.round(event.clientY - move.startY));
+            moveStrokes(note.id, move.ids, Math.round((event.clientX - move.startX) / documentZoom), Math.round((event.clientY - move.startY) / documentZoom));
             inkMoveRef.current = null;
             setInkMove(null);
             if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
@@ -317,6 +312,7 @@ export function CanvasWorkspace() {
           }}><GripVertical size={15} /></button>
         </div>}
       </article>
+      </div>
     </div>
     {crossTextPosition && createPortal(<div className="text-selection-tools" ref={crossTextToolsRef} style={crossTextPosition}><button type="button" className="format-bubble selection-ai-bubble" title="Enviar selección a la IA" aria-label="Enviar selección a la IA" onPointerDown={(event) => event.preventDefault()} onClick={() => { const selection = captureTextSelection(crossTextRangeRef.current, note.id, pageRef.current); if (selection) askAI(selection); setCrossTextPosition(null); }}><Sparkles size={15} /></button></div>, document.body)}
   </main>;

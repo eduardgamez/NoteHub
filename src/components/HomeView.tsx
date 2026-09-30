@@ -106,7 +106,9 @@ export function HomeView() {
   }
 
   return <main className="home-layout">
+    <aside className="home-ai"><div className="home-ai-glow"><div className="home-ai-content"><AIChat global compact home /></div></div></aside>
     <div className="home-left">
+      <section className="home-calendar" aria-label="Calendar"><CalendarView /></section>
       <section className="home-projects" aria-label="Projects">
         <div className="home-projects-label">Projects</div>
         <div className="home-project-controls" ref={controlsRef}><button className="project-more" aria-label={controlsOpen ? 'Hide project controls' : 'Show project controls'} aria-expanded={controlsOpen} onClick={() => { setControlsOpen(!controlsOpen); setMode('open'); }}><MoreHorizontal size={20} /></button>
@@ -116,8 +118,6 @@ export function HomeView() {
           {visibleProjects.map((project) => mode === 'edit' ? <div className="project-tile project-tile-editing" data-new-project={project.id === newProjectId} key={project.id}><span ref={(element) => { emojiNodesRef.current[project.id] = element; }} className="project-symbol project-inline-emoji" data-special={project.id === 'gym' || undefined} role="textbox" aria-label={`${project.id === newProjectId ? 'New project' : project.title} symbol`} contentEditable="plaintext-only" suppressContentEditableWarning data-placeholder={project.id === newProjectId ? '✦' : undefined} onKeyDown={handleEditKeyDown}>{project.id === newProjectId ? '' : projectEmoji(project)}</span><input className="project-inline-input project-title-input" aria-label={`${project.id === newProjectId ? 'New project' : project.title} title`} placeholder={project.id === newProjectId ? 'Project name' : undefined} maxLength={80} value={drafts[project.id]?.title ?? project.title} onChange={(event) => setDrafts({ ...drafts, [project.id]: { ...drafts[project.id], title: event.target.value } })} onKeyDown={handleEditKeyDown} /></div> : <button className="project-tile" key={project.id} onClick={() => chooseProject(project)} aria-label={`${mode === 'delete' ? 'Delete' : 'Open'} ${project.title}`}><span className="project-symbol" data-special={project.id === 'gym' || undefined}>{projectEmoji(project)}</span><strong>{project.title}</strong></button>)}
         </div>
       </section>
-      <section className="home-calendar" aria-label="Calendar"><CalendarView /></section>
     </div>
-    <aside className="home-ai"><div className="home-ai-glow"><div className="home-ai-content"><AIChat global compact home /></div></div></aside>
   </main>;
 }

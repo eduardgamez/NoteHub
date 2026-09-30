@@ -4,6 +4,7 @@ import { loadWorkspace, scheduleSave } from '../lib/storage';
 import { syncEngine, type SyncOperation } from '../sync/syncEngine';
 import { cloudSync } from '../sync/cloudSync';
 import { makeBlock } from '../lib/blockFactory';
+import { insertInLayout, moveInLayout } from '../lib/blockLayout';
 import { ensureTitleBlock, titleFromBlock } from '../lib/noteTitle';
 import { isStarterWorkspace } from '../lib/starterWorkspace';
 import { appendAIProfileText, migrateAIProfileText, profileSummary, validProfileUpdates } from '../ai/personalProfile';
@@ -53,7 +54,7 @@ interface WorkspaceStore extends WorkspaceStateData {
   undo: (noteId: string) => void;
   redo: (noteId: string) => void;
   upsertBlock: (noteId: string, block: CanvasBlock, broadcast?: boolean, recordHistory?: boolean) => void;
-  insertBlockAfter: (noteId: string, block: CanvasBlock, afterBlockId?: string | null) => void;
+  insertBlockAfter: (noteId: string, block: CanvasBlock, afterBlockId?: string | null, broadcast?: boolean, recordHistory?: boolean) => void;
   reorderBlock: (noteId: string, blockId: string, targetId: string, before: boolean, side?: boolean, broadcast?: boolean, recordHistory?: boolean) => void;
   removeSelectedBlocks: () => void;
   copySelectedBlocks: () => void;
@@ -283,9 +284,9 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
   setTool(tool) { set({ tool }); },
   setInkWidth(inkWidth) { set({ inkWidth }); },
   setInkColor(inkColor) { set({ inkColor }); },
-  setAiOpen(aiOpen) { set({ aiOpen }); },
+  setAiOpen(aiOpen) { set({ aiOpen, ...(aiOpen && window.innerWidth <= 820 ? { sidebarOpen: false } : {}) }); },
   setAiTextSelection(aiTextSelection) { set({ aiTextSelection }); },
-  setSidebarOpen(sidebarOpen) { set({ sidebarOpen }); },
+  setSidebarOpen(sidebarOpen) { set({ sidebarOpen, ...(sidebarOpen && window.innerWidth <= 820 ? { aiOpen: false } : {}) }); },
   selectBlock(id, additive = false) {
     set((state) => ({ selectedIds: additive ? (state.selectedIds.includes(id) ? state.selectedIds.filter((item) => item !== id) : [...state.selectedIds, id]) : [id] }));
   },
@@ -331,44 +332,22 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
     persist(get());
     if (broadcast) syncEngine.publish({ kind: 'block.upsert', noteId, block });
   },
-  insertBlockAfter(noteId, block, afterBlockId) {
+  insertBlockAfter(noteId, block, afterBlockId, broadcast = true, recordHistory = true) {
     const note = get().notes[noteId];
-    if (!note) return;
-    const index = afterBlockId ? note.blocks.findIndex((item) => item.id === afterBlockId) : -1;
-    set((state) => {
-      const current = state.notes[noteId];
-      const blocks = [...current.blocks];
-      blocks.splice(index < 0 ? blocks.length : index + 1, 0, block);
-      return { ...withCheckpoint(state, noteId), notes: { ...state.notes, [noteId]: { ...current, blocks, updatedAt: Date.now() } } };
-    });
+    if (!note || note.blocks.some((item) => item.id === block.id)) return;
+    const blocks = insertInLayout(note.blocks, block, afterBlockId);
+    set((state) => ({
+      ...(recordHistory ? withCheckpoint(state, noteId) : {}),
+      notes: { ...state.notes, [noteId]: { ...state.notes[noteId], blocks, updatedAt: Date.now() } },
+    }));
     persist(get());
-    syncEngine.publish({ kind: 'block.upsert', noteId, block, ...(index >= 0 ? { afterBlockId: afterBlockId! } : {}) });
+    if (broadcast) syncEngine.publish({ kind: 'block.upsert', noteId, block, ...(afterBlockId ? { afterBlockId } : {}) });
   },
   reorderBlock(noteId, blockId, targetId, before, side = false, broadcast = true, recordHistory = true) {
     const note = get().notes[noteId];
-    if (!note || blockId === targetId) return;
-    const source = note.blocks.find((item) => item.id === blockId);
-    const remaining = note.blocks.filter((item) => item.id !== blockId);
-    const targetIndex = remaining.findIndex((item) => item.id === targetId);
-    if (!source || targetIndex < 0) return;
-    const target = remaining[targetIndex];
-    if (source.isTitle || (side && target.isTitle)) return;
-    const groupId = target.layoutGroupId ?? target.id;
-    const columnId = side ? `${source.id}:${target.id}:${before ? 'left' : 'right'}` : target.layoutColumnId ?? target.id;
-    const moved = { ...source, layoutGroupId: groupId, layoutColumnId: columnId };
-    const next = [...remaining];
-    if (side) {
-      const columns = [...new Set(remaining.filter((item) => (item.layoutGroupId ?? item.id) === groupId).map((item) => item.layoutColumnId ?? item.id))];
-      const targetColumn = target.layoutColumnId ?? target.id;
-      const nextColumn = columns[columns.indexOf(targetColumn) + 1];
-      const index = before
-        ? next.findIndex((item) => (item.layoutGroupId ?? item.id) === groupId && (item.layoutColumnId ?? item.id) === targetColumn)
-        : nextColumn
-          ? next.findIndex((item) => (item.layoutGroupId ?? item.id) === groupId && (item.layoutColumnId ?? item.id) === nextColumn)
-          : next.reduce((last, item, position) => (item.layoutGroupId ?? item.id) === groupId ? position + 1 : last, targetIndex + 1);
-      next.splice(index, 0, moved);
-    } else next.splice(targetIndex + (before ? 0 : 1), 0, moved);
-    if (next.every((item, index) => item.id === note.blocks[index].id && item.layoutGroupId === note.blocks[index].layoutGroupId && item.layoutColumnId === note.blocks[index].layoutColumnId)) return;
+    if (!note) return;
+    const next = moveInLayout(note.blocks, blockId, targetId, before, side);
+    if (next === note.blocks || next.every((item, index) => item.id === note.blocks[index].id && (item.layoutGroupId ?? item.id) === (note.blocks[index].layoutGroupId ?? note.blocks[index].id) && (item.layoutColumnId ?? item.id) === (note.blocks[index].layoutColumnId ?? note.blocks[index].id))) return;
     set((state) => ({
       ...(recordHistory ? withCheckpoint(state, noteId) : {}),
       notes: { ...state.notes, [noteId]: { ...state.notes[noteId], blocks: next, updatedAt: Date.now() } },
@@ -667,8 +646,9 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
       return { notes, activeNoteId: activeRemoved ? nextNote?.id ?? '' : state.activeNoteId, activeView: activeRemoved && state.activeView === 'note' ? nextNote ? 'note' : 'project' : state.activeView, selectedIds: activeRemoved ? [] : state.selectedIds, activeBlockId: activeRemoved ? null : state.activeBlockId };
     });
     if (operation.kind === 'block.upsert') {
-      get().upsertBlock(operation.noteId, operation.block, false, false);
-      if (operation.afterBlockId) get().reorderBlock(operation.noteId, operation.block.id, operation.afterBlockId, false, false, false, false);
+      const note = get().notes[operation.noteId];
+      if (note?.blocks.some((block) => block.id === operation.block.id)) get().upsertBlock(operation.noteId, operation.block, false, false);
+      else get().insertBlockAfter(operation.noteId, operation.block, operation.afterBlockId, false, false);
     }
     if (operation.kind === 'block.reorder') get().reorderBlock(operation.noteId, operation.blockId, operation.targetId, operation.before, operation.side, false, false);
     if (operation.kind === 'stroke.add') get().addStroke(operation.noteId, operation.stroke, false, false);

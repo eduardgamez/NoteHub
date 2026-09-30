@@ -27,12 +27,29 @@ export function strokeIntersectsRect(stroke: InkStroke, rect: DocumentRect): boo
   return false;
 }
 
+export const DOCUMENT_WIDTH = 850;
+
+export function fitDocumentScale(availableWidth: number, maxColumns: number): number {
+  return maxColumns >= 3 || availableWidth <= 0 ? 1 : Math.min(1, availableWidth / DOCUMENT_WIDTH);
+}
+
+export function readDocumentScale(page: HTMLElement): number {
+  return page.offsetWidth > 0 ? page.getBoundingClientRect().width / page.offsetWidth || 1 : 1;
+}
+
+export function documentPoint(page: HTMLElement, clientX: number, clientY: number): Point {
+  const rect = page.getBoundingClientRect();
+  const scale = readDocumentScale(page);
+  return { x: (clientX - rect.left) / scale, y: (clientY - rect.top) / scale };
+}
+
 export function readDocumentLayout(page: HTMLElement): DocumentLayout {
   const pageRect = page.getBoundingClientRect();
+  const scale = readDocumentScale(page);
   const layout: DocumentLayout = {};
   page.querySelectorAll<HTMLElement>('[data-block-id]').forEach((element) => {
     const rect = element.getBoundingClientRect();
-    layout[element.dataset.blockId!] = { x: rect.left - pageRect.left, y: rect.top - pageRect.top, width: rect.width, height: rect.height };
+    layout[element.dataset.blockId!] = { x: (rect.left - pageRect.left) / scale, y: (rect.top - pageRect.top) / scale, width: rect.width / scale, height: rect.height / scale };
   });
   return layout;
 }

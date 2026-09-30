@@ -29,6 +29,16 @@ export function App() {
   useEffect(() => { void hydrate(); }, [hydrate]);
   useEffect(() => hydrated ? syncEngine.subscribe(applyRemote, () => workspaceDataFrom(useWorkspace.getState())) : undefined, [applyRemote, hydrated]);
 
+  useEffect(() => {
+    const fitPanels = () => {
+      const state = useWorkspace.getState();
+      if (window.innerWidth <= 820 && state.aiOpen && state.sidebarOpen) state.setSidebarOpen(false);
+    };
+    fitPanels();
+    window.addEventListener('resize', fitPanels);
+    return () => window.removeEventListener('resize', fitPanels);
+  }, [aiOpen, sidebarOpen]);
+
   if (!hydrated) return <div className="loading-screen"><div className="brand-mark">N</div><span>Opening your workspace…</span></div>;
 
   const projectView = activeView === 'note' || activeView === 'project' || activeView === 'context';
