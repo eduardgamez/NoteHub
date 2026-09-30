@@ -34,7 +34,8 @@ describe('workspace retrieval', () => {
   });
 
   it('reads non-file workspace sections only when requested', () => {
-    const calendar = readWorkspaceSection(seedWorkspace, 'calendar', 'exam');
+    const data = { ...seedWorkspace, calendarEvents: [{ id: 'exam', title: 'Exam', start: '2026-10-01T09:00:00Z', end: '2026-10-01T10:00:00Z', color: 'green' as const }] };
+    const calendar = readWorkspaceSection(data, 'calendar', 'exam');
     expect(calendar.some((item) => item.type === 'calendar-event')).toBe(true);
     expect(calendar.every((item) => item.type !== 'note-text' && item.type !== 'file-outline')).toBe(true);
   });
@@ -57,5 +58,30 @@ describe('workspace retrieval', () => {
     expect(readWorkspaceFiles(data, ['sensitivity'])[0].content).toContain('handwriting="precio sombra"');
     data.notes.sensitivity.strokes[0].points[1].x = 40;
     expect(readWorkspaceFiles(data, ['sensitivity'])[0].content).not.toContain('handwriting="precio sombra"');
+  });
+});
+
+
+describe('complete calendar access in every chat', () => {
+  const data = structuredClone(seedWorkspace);
+  data.calendarEvents = Array.from({ length: 75 }, (_, index) => ({ id: `event-${index}`, title: index === 0 ? 'Exam' : `Meeting ${index}`, start: '2026-10-01T09:00:00Z', end: '2026-10-01T10:00:00Z', color: 'green' as const, projectId: index % 2 ? 'other-project' : undefined, notes: 'Notas del evento', checklist: [{ id: 'item', text: 'Traer apuntes', done: false }] }));
+  data.tasks = Array.from({ length: 75 }, (_, index) => ({ id: `task-${index}`, title: index === 0 ? 'Exam reminder' : `Reminder ${index}`, done: index % 2 === 0, reminder: true, projectId: 'other-project', due: index % 2 ? undefined : '2026-10-01T08:00:00Z', checklist: [] }));
+
+  it('returns all events and reminders without project, match or 40-item filtering', () => {
+    const calendar = readWorkspaceSection(data, 'calendar', 'Exam', { projectId: 'university' });
+    expect(calendar.filter((item) => item.type === 'calendar-event')).toHaveLength(75);
+    expect(calendar.filter((item) => item.type === 'task')).toHaveLength(75);
+    expect(calendar.find((item) => item.id === 'event-74')?.content).toContain('Traer apuntes');
+    expect(calendar.find((item) => item.id === 'task-74')?.content).toContain('Done');
+    expect(readWorkspaceSection(data, 'calendar', 'Exam')).toEqual(calendar);
+  });
+
+  it('returns every reminder including undated and completed items when reading tasks', () => {
+    expect(readWorkspaceSection(data, 'tasks', 'Exam', { projectId: 'university' })).toHaveLength(75);
+  });
+
+  it('still respects the calendar access setting', () => {
+    const permissions = { readCurrentFile: true, searchFiles: true, readProjectContext: true, inspectCalendar: false, inspectGym: true };
+    expect(readWorkspaceSection(data, 'calendar', 'Exam', { permissions }).every((item) => item.type === 'workspace-section')).toBe(true);
   });
 });

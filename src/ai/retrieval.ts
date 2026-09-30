@@ -61,18 +61,18 @@ export function workspaceFileMap(data: WorkspaceStateData, options: { projectId?
 export type WorkspaceSection = 'calendar' | 'tasks' | 'gym' | 'context';
 
 export function readWorkspaceSection(data: WorkspaceStateData, section: WorkspaceSection, query: string, options: { projectId?: string; permissions?: AIPermissions } = {}): AIContextItem[] {
-  const relevant = (value: string) => score(value, terms(query)) > 0;
+  const queryTerms = terms(query);
+  const checklistText = (items: Array<{ text: string; done: boolean }> = []) => items.length ? ` · checklist: ${items.map((item) => `${item.done ? '✓' : '○'} ${item.text}`).join('; ')}` : '';
+  const taskItem = (task: WorkspaceStateData['tasks'][number]): AIContextItem => ({ id: task.id, type: 'task', content: `${task.reminder ? 'Reminder' : 'Task'} · ${task.done ? 'Done' : 'Open'}: ${task.title}${task.due ? ` · due ${task.due}` : ''}${task.projectId ? ` · project=${task.projectId}` : ''}${checklistText(task.checklist)}` });
   const inProject = (projectId?: string) => !options.projectId || projectId === options.projectId;
   const result: AIContextItem[] = [];
   if (section === 'calendar' && options.permissions?.inspectCalendar !== false) {
-    const events = data.calendarEvents.filter((event) => inProject(event.projectId));
-    const matches = events.filter((event) => relevant(`${event.title} ${event.notes ?? ''}`));
-    (matches.length ? matches : events).slice(0, 40).forEach((event) => result.push({ id: event.id, type: 'calendar-event', content: `${event.title}: ${event.start}–${event.end}${event.notes ? ` · ${event.notes}` : ''}` }));
+    // Calendar access is workspace-wide, even inside a project chat. Rank, never discard.
+    [...data.calendarEvents].sort((a, b) => score(`${b.title} ${b.notes ?? ''}`, queryTerms) - score(`${a.title} ${a.notes ?? ''}`, queryTerms)).forEach((event) => result.push({ id: event.id, type: 'calendar-event', content: `${event.title}: ${event.start}–${event.end}${event.projectId ? ` · project=${event.projectId}` : ''}${event.notes ? ` · ${event.notes}` : ''}${checklistText(event.checklist)}` }));
+    data.tasks.filter((task) => task.reminder || task.due).forEach((task) => result.push(taskItem(task)));
   }
   if (section === 'tasks') {
-    const tasks = data.tasks.filter((task) => inProject(task.projectId));
-    const matches = tasks.filter((task) => relevant(task.title));
-    (matches.length ? matches : tasks).slice(0, 40).forEach((task) => result.push({ id: task.id, type: 'task', content: `${task.reminder ? 'Reminder' : 'Task'} · ${task.done ? 'Done' : 'Open'}: ${task.title}${task.due ? ` · due ${task.due}` : ''}${task.checklist.length ? ` · checklist: ${task.checklist.map((item) => `${item.done ? '✓' : '○'} ${item.text}`).join('; ')}` : ''}` }));
+    [...data.tasks].sort((a, b) => score(b.title, queryTerms) - score(a.title, queryTerms)).forEach((task) => result.push(taskItem(task)));
   }
   if (section === 'gym' && options.permissions?.inspectGym !== false) {
     data.workouts.slice(-20).forEach((workout) => result.push({ id: workout.id, type: 'workout', content: `${workout.title} ${workout.startedAt}: ${workout.exercises.map((entry) => `${data.exercises.find((exercise) => exercise.id === entry.exerciseId)?.name ?? entry.exerciseId}: ${entry.sets.map((set) => `${set.weight}kg×${set.reps} RIR${set.rir ?? '?'}`).join(', ')}`).join('; ')}` }));
@@ -81,7 +81,7 @@ export function readWorkspaceSection(data: WorkspaceStateData, section: Workspac
     data.projects.filter((project) => inProject(project.id)).forEach((project) => project.context.forEach((item) => result.push({ id: `project:${project.id}:${item.id}`, type: 'project-context', content: `${project.title} · ${item.label}: ${item.value}` })));
     data.folders.filter((folder) => inProject(folder.projectId)).forEach((folder) => folder.context.forEach((item) => result.push({ id: `folder:${folder.id}:${item.id}`, type: 'folder-context', content: `${folder.title} · ${item.label}: ${item.value}` })));
   }
-  return result.length ? result.slice(0, 40) : [{ id: section, type: 'workspace-section', content: `No accessible ${section} entries.` }];
+  return result.length ? (section === 'calendar' || section === 'tasks' ? result : result.slice(0, 40)) : [{ id: section, type: 'workspace-section', content: `No accessible ${section} entries.` }];
 }
 
 export function readWorkspaceFiles(data: WorkspaceStateData, noteIds: string[], options: { projectId?: string; currentNoteId?: string; permissions?: AIPermissions } = {}): AIContextItem[] {
