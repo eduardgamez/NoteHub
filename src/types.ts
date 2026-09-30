@@ -86,6 +86,7 @@ export interface CalendarEvent {
   color: 'green' | 'purple' | 'amber' | 'blue';
   projectId?: string;
   notes?: string;
+  checklist?: ChecklistEntry[];
 }
 
 export interface ChecklistEntry { id: string; text: string; done: boolean }
