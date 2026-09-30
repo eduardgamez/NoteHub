@@ -1,3 +1,4 @@
+import { apiUrl } from '../native/bridge';
 import { readProgressStream } from './progressStream';
 import type { ProfileUpdate, ProposalKind } from '../types';
 import { cloudSync } from '../sync/cloudSync';
@@ -38,7 +39,7 @@ export class ServerAIProvider implements AIProvider {
     const accessToken = await cloudSync.accessToken();
     const provider = getActiveProvider();
     const providerKey = provider === 'codex' ? undefined : await getProviderKey(provider);
-    const response = await fetch('/api/ai/complete', {
+    const response = await fetch(apiUrl('/api/ai/complete'), {
       method: 'POST', headers: { 'Content-Type': 'application/json', ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
       body: JSON.stringify({ provider, providerKey, messages, context, global: options?.global, permissions: { web: options?.web }, purpose: options?.purpose, model: options?.model, thinking: options?.thinking, effort: options?.effort, stream: provider === 'codex' && Boolean(options?.onProgress) }),
     });
@@ -58,7 +59,7 @@ export class ServerAIProvider implements AIProvider {
 export async function getGeminiModels(): Promise<GeminiModelOption[]> {
   const providerKey = await getProviderKey('gemini');
   const accessToken = await cloudSync.accessToken();
-  const response = await fetch('/api/ai/models', {
+  const response = await fetch(apiUrl('/api/ai/models'), {
     method: 'POST', headers: { 'Content-Type': 'application/json', ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
     body: JSON.stringify({ provider: 'gemini', providerKey }),
   });
@@ -69,7 +70,7 @@ export async function getGeminiModels(): Promise<GeminiModelOption[]> {
 
 export async function getCodexModels(): Promise<CodexModelOption[]> {
   const accessToken = await cloudSync.accessToken();
-  const response = await fetch('/api/ai/codex/models', { headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {} });
+  const response = await fetch(apiUrl('/api/ai/codex/models'), { headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {} });
   if (!response.ok) throw new Error('Could not load Codex models.');
   const result = await response.json();
   return Array.isArray(result.models) ? result.models.filter((item: CodexModelOption) => typeof item.id === 'string') : [];
@@ -77,7 +78,8 @@ export async function getCodexModels(): Promise<CodexModelOption[]> {
 
 export async function getProviderStatus(checkCodex = false): Promise<ProviderStatus | null> {
   try {
-    const response = await fetch(checkCodex ? '/api/ai/status?codex=1' : '/api/ai/status');
+    const accessToken = checkCodex ? await cloudSync.accessToken() : undefined;
+    const response = await fetch(apiUrl(checkCodex ? '/api/ai/status?codex=1' : '/api/ai/status'), { headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {} });
     if (!response.ok) return null;
     const result = await response.json();
     return { ...result.providers, codexInstalled: result.codexInstalled, models: result.models } as ProviderStatus;
@@ -86,7 +88,7 @@ export async function getProviderStatus(checkCodex = false): Promise<ProviderSta
 
 export async function beginCodexLogin(): Promise<CodexLoginState> {
   const accessToken = await cloudSync.accessToken();
-  const response = await fetch('/api/ai/codex/login', { method: 'POST', headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {} });
+  const response = await fetch(apiUrl('/api/ai/codex/login'), { method: 'POST', headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {} });
   const result = await response.json();
   if (!response.ok) throw new Error(result.error || 'Could not start ChatGPT sign-in.');
   return result as CodexLoginState;
@@ -94,7 +96,7 @@ export async function beginCodexLogin(): Promise<CodexLoginState> {
 
 export async function getCodexLoginStatus(): Promise<CodexLoginState> {
   const accessToken = await cloudSync.accessToken();
-  const response = await fetch('/api/ai/codex/login', { headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {} });
+  const response = await fetch(apiUrl('/api/ai/codex/login'), { headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {} });
   if (!response.ok) throw new Error('Could not check ChatGPT sign-in.');
   return response.json() as Promise<CodexLoginState>;
 }

@@ -1,90 +1,94 @@
-import { useMemo, useState } from 'react';
-import { Activity, Check, ChevronRight, Dumbbell, History, Library, Plus, Trophy } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronUp, Clock3, Dumbbell, Pencil, Play, Plus, Search, Trash2, X } from 'lucide-react';
 import { useWorkspace } from '../../store/useWorkspace';
-import type { Workout, WorkoutExerciseLog } from '../../types';
+import { useGymDraft } from '../../gym/draft';
+import { completedSets, exerciseLog, newWorkout, personalRecords, workoutVolume } from '../../gym/workout';
+import type { Routine, WorkoutExerciseLog, WorkoutSet } from '../../types';
 
-type GymTab = 'overview' | 'workout' | 'history' | 'exercises';
-
+type Tab = 'inicio' | 'progreso' | 'historial' | 'ejercicios';
+const number = (value: number) => value.toLocaleString('es-ES', { maximumFractionDigits: 1 });
 export function GymView() {
-  const exercises = useWorkspace((state) => state.exercises);
-  const routines = useWorkspace((state) => state.routines);
-  const workouts = useWorkspace((state) => state.workouts);
-  const addWorkout = useWorkspace((state) => state.addWorkout);
-  const addExercise = useWorkspace((state) => state.addExercise);
-  const [tab, setTab] = useState<GymTab>('overview');
-  const [activeWorkout, setActiveWorkout] = useState<Workout | null>(null);
-  const [exerciseName, setExerciseName] = useState('');
-  const [renderedAt] = useState(() => Date.now());
+  const state = useWorkspace();
+  const { exercises, routines, workouts } = state;
+  const { workout: active, setWorkout, restUntil, rest } = useGymDraft();
+  const [tab, setTab] = useState<Tab>('inicio');
+  const [editing, setEditing] = useState<Routine | null>(null);
+  const [search, setSearch] = useState('');
+  const [exerciseDraft, setExerciseDraft] = useState({ name: '', category: '', equipment: '' });
+  const [chartId, setChartId] = useState('');
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [now, setNow] = useState(Date.now);
+  const [restSeconds, setRestSeconds] = useState(90);
+  const [adding, setAdding] = useState('');
+  const [message, setMessage] = useState('');
+  useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
   const sorted = [...workouts].sort((a, b) => b.startedAt.localeCompare(a.startedAt));
-  const inclineHistory = sorted.slice().reverse().map((workout) => workout.exercises.find((item) => item.exerciseId === 'incline-db')?.sets[0]?.weight ?? 0).filter(Boolean);
-  const totalSets = workouts.flatMap((workout) => workout.exercises.flatMap((exercise) => exercise.sets)).filter((set) => set.completed).length;
-  const personalRecords = useMemo(() => exercises.map((exercise) => ({ exercise, weight: Math.max(0, ...workouts.flatMap((workout) => workout.exercises.filter((entry) => entry.exerciseId === exercise.id).flatMap((entry) => entry.sets.map((set) => set.weight)))) })).filter((record) => record.weight > 0).sort((a, b) => b.weight - a.weight), [exercises, workouts]);
+  const records = personalRecords(exercises, workouts);
+  const currentMonth = new Date(now).getMonth(), currentYear = new Date(now).getFullYear();
+  const month = workouts.filter((workout) => new Date(workout.startedAt).getMonth() === currentMonth && new Date(workout.startedAt).getFullYear() === currentYear);
+  const selectedExercise = exercises.find((item) => item.id === (chartId || records[0]?.exercise.id || exercises[0]?.id));
+  const points = [...sorted].reverse().flatMap((workout) => {
+    const sets = workout.exercises.filter((log) => log.exerciseId === selectedExercise?.id).flatMap((log) => log.sets).filter((set) => set.completed);
+    return sets.length ? [{ date: new Date(workout.startedAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }), weight: Math.max(...sets.map((set) => set.weight)) }] : [];
+  }).slice(-8);
+  const remaining = Math.max(0, Math.ceil((restUntil - now) / 1000));
+  const elapsed = active ? Math.max(0, Math.floor((now - new Date(active.startedAt).getTime()) / 60000)) : 0;
 
-  function startWorkout() {
-    const routine = routines[0];
-    setActiveWorkout({ id: crypto.randomUUID(), routineId: routine.id, title: routine.name, startedAt: new Date().toISOString(), exercises: routine.exercises.map((entry) => ({ exerciseId: entry.exerciseId, sets: Array.from({ length: entry.targetSets }, () => ({ id: crypto.randomUUID(), reps: 0, weight: 0, rir: 2, completed: false })) })) });
-    setTab('workout');
+  function start(routine?: Routine) {
+    if (active) { setTab('inicio'); return; }
+    setWorkout(newWorkout(routine, workouts)); setTab('inicio'); setMessage('');
   }
-
-  function finishWorkout() {
-    if (!activeWorkout) return;
-    addWorkout({ ...activeWorkout, endedAt: new Date().toISOString() }); setActiveWorkout(null); setTab('overview');
+  function changeLog(index: number, update: (log: WorkoutExerciseLog) => WorkoutExerciseLog) {
+    if (active) setWorkout({ ...active, exercises: active.exercises.map((log, i) => i === index ? update(log) : log) });
   }
-
-  function updateLog(exerciseIndex: number, setIndex: number, field: 'weight' | 'reps' | 'rir', value: number) {
-    if (!activeWorkout) return;
-    const logs = activeWorkout.exercises.map((log, logIndex) => logIndex !== exerciseIndex ? log : { ...log, sets: log.sets.map((set, index) => index !== setIndex ? set : { ...set, [field]: value }) });
-    setActiveWorkout({ ...activeWorkout, exercises: logs });
+  function changeSet(exerciseIndex: number, setIndex: number, change: Partial<WorkoutSet>) {
+    changeLog(exerciseIndex, (log) => ({ ...log, sets: log.sets.map((set, index) => index === setIndex ? { ...set, ...change } : set) }));
   }
-
-  function toggleSet(exerciseIndex: number, setIndex: number) {
-    if (!activeWorkout) return;
-    const logs = activeWorkout.exercises.map((log, logIndex) => logIndex !== exerciseIndex ? log : { ...log, sets: log.sets.map((set, index) => index !== setIndex ? set : { ...set, completed: !set.completed }) });
-    setActiveWorkout({ ...activeWorkout, exercises: logs });
+  function finish() {
+    if (!active) return;
+    if (!completedSets(active).length) { setMessage('Marca al menos una serie como completada para guardar el entrenamiento.'); return; }
+    state.addWorkout({ ...active, endedAt: new Date().toISOString() }); setWorkout(null); rest(0); setTab('historial'); setExpanded(active.id); setMessage('');
   }
-
-  function createExercise(event: React.FormEvent) {
-    event.preventDefault(); if (!exerciseName.trim()) return;
-    addExercise({ id: crypto.randomUUID(), name: exerciseName.trim(), category: 'Custom', equipment: 'Other' }); setExerciseName('');
+  function moveLog(index: number, direction: number) {
+    if (!active || !active.exercises[index + direction]) return;
+    const logs = [...active.exercises]; [logs[index], logs[index + direction]] = [logs[index + direction], logs[index]];
+    setWorkout({ ...active, exercises: logs });
   }
+  function newRoutine() { setEditing({ id: crypto.randomUUID(), name: '', exercises: [] }); }
 
-  return <div className="module-view gym-view">
-    <div className="module-header"><div><p className="eyebrow">TRAINING</p><h1>Gym</h1><p>{workouts.length} sessions · {totalSets} completed sets</p></div>
-      <button className="primary-button" onClick={startWorkout}><Dumbbell size={15} /> Start workout</button>
-    </div>
-    <nav className="module-tabs">
-      <button className={tab === 'overview' ? 'active' : ''} onClick={() => setTab('overview')}><Activity size={15} /> Overview</button>
-      <button className={tab === 'workout' ? 'active' : ''} onClick={() => setTab('workout')}><Dumbbell size={15} /> Workout</button>
-      <button className={tab === 'history' ? 'active' : ''} onClick={() => setTab('history')}><History size={15} /> History</button>
-      <button className={tab === 'exercises' ? 'active' : ''} onClick={() => setTab('exercises')}><Library size={15} /> Exercises</button>
-    </nav>
-
-    {tab === 'overview' && <div className="gym-dashboard">
-      <section className="metric-card"><span>Sessions this month</span><strong>{workouts.filter((workout) => renderedAt - new Date(workout.startedAt).getTime() < 31 * 86400000).length}</strong><small>Consistency builds progress</small></section>
-      <section className="metric-card"><span>Latest workout</span><strong>{sorted[0]?.title ?? '—'}</strong><small>{sorted[0] ? new Date(sorted[0].startedAt).toLocaleDateString() : 'No sessions yet'}</small></section>
-      <section className="metric-card accent"><span>Top incline press</span><strong>{Math.max(0, ...inclineHistory)} kg</strong><small>Best working set</small></section>
-      <section className="progress-card"><div className="panel-heading"><Activity size={17} /><div><strong>Incline dumbbell press</strong><small>Top-set weight · last 8 sessions</small></div></div><ProgressChart values={inclineHistory} /></section>
-      <section className="records-card"><div className="panel-heading"><Trophy size={17} /><div><strong>Personal records</strong><small>Your strongest logged sets</small></div></div>{personalRecords.slice(0, 4).map((record) => <div className="record-row" key={record.exercise.id}><span>{record.exercise.name}</span><strong>{record.weight} kg</strong></div>)}</section>
-    </div>}
-
-    {tab === 'workout' && (activeWorkout ? <div className="live-workout"><div className="live-workout-heading"><div><span className="live-dot" />Live workout<h2>{activeWorkout.title}</h2></div><button className="primary-button" onClick={finishWorkout}>Finish workout</button></div>
-      {activeWorkout.exercises.map((log, exerciseIndex) => <ExerciseLogger key={log.exerciseId} log={log} exerciseName={exercises.find((item) => item.id === log.exerciseId)?.name ?? 'Exercise'} onUpdate={(setIndex, field, value) => updateLog(exerciseIndex, setIndex, field, value)} onToggle={(setIndex) => toggleSet(exerciseIndex, setIndex)} />)}
-    </div> : <div className="empty-state"><Dumbbell size={25} /><h2>No active workout</h2><p>Start your routine and log each set without leaving this screen.</p><button className="primary-button" onClick={startWorkout}>Start Upper A</button></div>)}
-
-    {tab === 'history' && <div className="history-list">{sorted.map((workout) => <article key={workout.id}><div className="history-date"><strong>{new Date(workout.startedAt).getDate()}</strong><span>{new Date(workout.startedAt).toLocaleDateString('en', { month: 'short' })}</span></div><div><strong>{workout.title}</strong><small>{workout.exercises.length} exercises · {workout.exercises.reduce((sum, item) => sum + item.sets.filter((set) => set.completed).length, 0)} sets</small></div><ChevronRight size={17} /></article>)}</div>}
-
-    {tab === 'exercises' && <div className="exercise-library"><form className="quick-add" onSubmit={createExercise}><Plus size={17} /><input value={exerciseName} onChange={(event) => setExerciseName(event.target.value)} placeholder="Create a custom exercise…" /></form><div className="exercise-grid">{exercises.map((exercise) => <article key={exercise.id}><div className="exercise-icon"><Dumbbell size={17} /></div><div><strong>{exercise.name}</strong><small>{exercise.category} · {exercise.equipment}</small></div></article>)}</div></div>}
+  return <div className="module-view gym-view gym-redesign">
+    <header className="gym-heading"><h1>Gimnasio</h1>{tab !== 'inicio' && <button className="gym-link" onClick={() => setTab('inicio')}>← Volver a entrenar</button>}</header>
+    {tab === 'progreso' && <>
+      <div className="gym-stats"><div><span>Sesiones este mes</span><strong>{month.length}</strong></div><div><span>Series completadas</span><strong>{month.reduce((sum, workout) => sum + completedSets(workout).length, 0)}</strong></div><div><span>Volumen este mes</span><strong>{number(month.reduce((sum, workout) => sum + workoutVolume(workout), 0))}<small> kg</small></strong></div></div>
+      <div className="gym-overview-grid"><section className="gym-paper"><div className="gym-section-title"><h2>Progreso</h2><select aria-label="Ejercicio del gráfico" value={selectedExercise?.id ?? ''} onChange={(event) => setChartId(event.target.value)}>{exercises.map((exercise) => <option key={exercise.id} value={exercise.id}>{exercise.name}</option>)}</select></div><p className="gym-muted">Mejor peso en una serie completada · últimas 8 sesiones</p><ProgressChart points={points} /></section><section className="gym-paper"><h2>Mejores marcas</h2>{records.length ? records.slice(0, 6).map((record) => <div className="gym-record" key={record.exercise.id}><span>{record.exercise.name}</span><strong>{number(record.weight)} kg</strong></div>) : <p className="gym-muted">Tus primeras series completadas aparecerán aquí.</p>}</section></div>
+    </>}
+    {tab === 'inicio' && !active && <><div className="gym-section-title"><h2>Rutinas</h2><button className="gym-link" onClick={newRoutine}><Plus size={15} />Nueva rutina</button></div><div className="gym-routines">{routines.map((routine) => <section className="gym-routine-row" key={routine.id}><div className="gym-routine-info"><h2>{routine.name}</h2><details className="gym-routine-preview"><summary>{routine.exercises.length} ejercicios · {routine.exercises.reduce((sum, item) => sum + item.targetSets, 0)} series</summary><div className="gym-routine-exercises">{routine.exercises.map((item) => <div key={item.exerciseId}><span>{exercises.find((exercise) => exercise.id === item.exerciseId)?.name ?? 'Ejercicio'}</span><small>{item.targetSets} × {item.repRange}</small></div>)}</div></details></div><div className="gym-inline"><button className="gym-icon" aria-label={`Editar ${routine.name}`} onClick={() => setEditing(structuredClone(routine))}><Pencil size={15} /></button><button className="gym-primary" aria-label={`Empezar rutina ${routine.name}`} onClick={() => start(routine)}><Play size={13} />Empezar</button></div></section>)}</div>{!routines.length && <p className="gym-muted">Crea tu primera rutina o empieza un entrenamiento libre.</p>}<button className="gym-link gym-free" onClick={() => start()}><Plus size={15} />Entrenamiento libre</button></>}
+    {tab === 'inicio' && active && <>
+      <div className="gym-session-head"><input aria-label="Nombre del entrenamiento" value={active.title} onChange={(event) => setWorkout({ ...active, title: event.target.value })} /><span><Clock3 size={14} />{elapsed} min · {completedSets(active).length} series · {number(workoutVolume(active))} kg</span></div>
+      <div className="gym-rest"><span>{remaining ? `Descanso · ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}` : 'Descanso entre series'}</span><select aria-label="Duración del descanso" value={restSeconds} onChange={(event) => setRestSeconds(Number(event.target.value))}>{[30, 60, 90, 120, 180].map((seconds) => <option value={seconds} key={seconds}>{seconds} s</option>)}</select><button className="gym-link" onClick={() => rest(remaining ? 0 : restSeconds)}>{remaining ? 'Saltar' : 'Iniciar'}</button></div>
+      <div className="gym-logs">{active.exercises.map((log, exerciseIndex) => <section className="gym-paper gym-log" key={log.exerciseId}><div className="gym-section-title"><h2>{exercises.find((item) => item.id === log.exerciseId)?.name ?? 'Ejercicio'}</h2><div className="gym-inline"><button className="gym-icon" disabled={!exerciseIndex} aria-label="Subir ejercicio" onClick={() => moveLog(exerciseIndex, -1)}><ArrowUp size={14} /></button><button className="gym-icon" disabled={exerciseIndex === active.exercises.length - 1} aria-label="Bajar ejercicio" onClick={() => moveLog(exerciseIndex, 1)}><ArrowDown size={14} /></button><button className="gym-icon" aria-label="Quitar ejercicio de la sesión" onClick={() => setWorkout({ ...active, exercises: active.exercises.filter((_, index) => index !== exerciseIndex) })}><X size={14} /></button></div></div>
+        <div className="gym-set-row gym-set-heading"><span>Serie</span><span>kg</span><span>Reps</span><span title="Repeticiones en reserva">RIR</span><span /><span /></div>{log.sets.map((set, index) => <div className={`gym-set-row ${set.completed ? 'completed' : ''}`} key={set.id}><span>{index + 1}</span>{(['weight', 'reps', 'rir'] as const).map((field) => <input key={field} aria-label={`${field === 'weight' ? 'Peso' : field === 'reps' ? 'Repeticiones' : 'RIR'} serie ${index + 1}`} type="number" inputMode={field === 'weight' ? 'decimal' : 'numeric'} min="0" max={field === 'rir' ? 10 : undefined} step={field === 'weight' ? .5 : 1} value={set[field] ?? ''} onChange={(event) => { const value = Number(event.target.value); if (Number.isFinite(value) && value >= 0) changeSet(exerciseIndex, index, { [field]: field === 'weight' ? value : Math.min(field === 'rir' ? 10 : 999, Math.floor(value)) }); }} />)}<button className={`gym-check ${set.completed ? 'checked' : ''}`} role="checkbox" aria-checked={set.completed} aria-label={`Completar serie ${index + 1}`} onClick={() => { if (!set.completed && !set.reps) { setMessage('Añade las repeticiones antes de completar la serie.'); return; } changeSet(exerciseIndex, index, { completed: !set.completed }); if (!set.completed) rest(restSeconds); setMessage(''); }}>{set.completed && <Check size={14} />}</button><button className="gym-icon" aria-label={`Quitar serie ${index + 1}`} onClick={() => changeLog(exerciseIndex, (entry) => ({ ...entry, sets: entry.sets.filter((_, i) => i !== index) }))}><X size={13} /></button></div>)}
+        <button className="gym-link" onClick={() => changeLog(exerciseIndex, (entry) => ({ ...entry, sets: [...entry.sets, { ...(entry.sets.at(-1) ?? { weight: 0, reps: 8, rir: 2 }), id: crypto.randomUUID(), completed: false }] }))}><Plus size={13} />Añadir serie</button><input className="gym-notes" aria-label="Notas del ejercicio" placeholder="Notas del ejercicio…" value={log.notes ?? ''} onChange={(event) => changeLog(exerciseIndex, (entry) => ({ ...entry, notes: event.target.value }))} />
+      </section>)}</div>
+      <div className="gym-add-exercise"><select aria-label="Añadir ejercicio a la sesión" value={adding} onChange={(event) => setAdding(event.target.value)}><option value="">Añadir ejercicio…</option>{exercises.filter((exercise) => !active.exercises.some((log) => log.exerciseId === exercise.id)).map((exercise) => <option key={exercise.id} value={exercise.id}>{exercise.name}</option>)}</select><button className="gym-link" disabled={!adding} onClick={() => { if (adding) { setWorkout({ ...active, exercises: [...active.exercises, exerciseLog(adding, 3, '8-12', workouts)] }); setAdding(''); } }}><Plus size={15} />Añadir</button></div><textarea className="gym-notes" aria-label="Notas de la sesión" placeholder="Notas de la sesión…" value={active.notes ?? ''} onChange={(event) => setWorkout({ ...active, notes: event.target.value })} />
+      {message && <p className="gym-muted" role="status">{message}</p>}<div className="gym-session-footer"><small>Guardado automáticamente en este dispositivo.</small><button className="gym-link" onClick={() => { if (window.confirm('¿Descartar esta sesión sin guardar?')) { setWorkout(null); rest(0); setMessage(''); } }}>Descartar</button><button className="gym-primary" onClick={finish}>Terminar y guardar</button></div>
+    </>}
+    {tab === 'historial' && <div className="gym-history">{!sorted.length && <div className="gym-empty"><h2>Aún no hay sesiones</h2><p>Tu historial aparecerá al guardar un entrenamiento.</p></div>}{sorted.map((workout) => <section className="gym-paper" key={workout.id}><button className="gym-history-heading" aria-expanded={expanded === workout.id} onClick={() => setExpanded(expanded === workout.id ? null : workout.id)}><div className="gym-history-date"><strong>{new Date(workout.startedAt).getDate()}</strong><small>{new Date(workout.startedAt).toLocaleDateString('es-ES', { month: 'short' })}</small></div><div><strong>{workout.title}</strong><small>{completedSets(workout).length} series · {number(workoutVolume(workout))} kg · {workout.endedAt ? Math.max(0, Math.round((new Date(workout.endedAt).getTime() - new Date(workout.startedAt).getTime()) / 60000)) : '—'} min</small></div>{expanded === workout.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</button>{expanded === workout.id && <div className="gym-history-detail">{workout.exercises.map((log) => <div key={log.exerciseId}><strong>{exercises.find((item) => item.id === log.exerciseId)?.name ?? 'Ejercicio'}</strong><p>{log.sets.filter((set) => set.completed).map((set) => `${number(set.weight)} kg × ${set.reps}${set.rir != null ? ` · RIR ${set.rir}` : ''}`).join(' / ') || 'Sin series completadas'}</p>{log.notes && <p>{log.notes}</p>}</div>)}{workout.notes && <p>{workout.notes}</p>}<button className="gym-link danger" onClick={() => { if (window.confirm('¿Eliminar esta sesión del historial?')) state.removeWorkout(workout.id); }}><Trash2 size={13} />Eliminar sesión</button></div>}</section>)}</div>}
+    {tab === 'ejercicios' && <><label className="gym-search"><Search size={16} /><input aria-label="Buscar ejercicios" placeholder="Buscar por nombre, grupo o material…" value={search} onChange={(event) => setSearch(event.target.value)} /></label><div className="gym-library">{exercises.filter((exercise) => `${exercise.name} ${exercise.category} ${exercise.equipment}`.toLowerCase().includes(search.toLowerCase())).map((exercise) => <article key={exercise.id}><Dumbbell size={17} /><div><strong>{exercise.name}</strong><small>{exercise.category} · {exercise.equipment}</small></div></article>)}</div><form className="gym-paper gym-new-exercise" onSubmit={(event) => { event.preventDefault(); if (!exerciseDraft.name.trim()) return; state.addExercise({ id: crypto.randomUUID(), name: exerciseDraft.name.trim(), category: exerciseDraft.category.trim() || 'Personalizado', equipment: exerciseDraft.equipment.trim() || 'Otro' }); setExerciseDraft({ name: '', category: '', equipment: '' }); }}><h2>Nuevo ejercicio</h2><div>{(['name', 'category', 'equipment'] as const).map((field) => <input aria-label={field === 'name' ? 'Nombre del ejercicio' : field === 'category' ? 'Grupo muscular' : 'Material'} placeholder={field === 'name' ? 'Nombre' : field === 'category' ? 'Grupo muscular' : 'Material'} required={field === 'name'} key={field} value={exerciseDraft[field]} onChange={(event) => setExerciseDraft({ ...exerciseDraft, [field]: event.target.value })} />)}<button className="gym-primary" type="submit">Crear</button></div></form></>}
+    {tab === 'inicio' && <nav className="gym-secondary" aria-label="Más del gimnasio"><button className="gym-link" onClick={() => setTab('historial')}>Historial</button><button className="gym-link" onClick={() => setTab('ejercicios')}>Ejercicios</button><button className="gym-link" onClick={() => setTab('progreso')}>Progreso</button></nav>}
+    {editing && <RoutineEditor routine={editing} onClose={() => setEditing(null)} onSave={(routine) => { state.upsertRoutine(routine); setEditing(null); }} onDelete={() => { if (window.confirm('¿Eliminar esta rutina? Tus sesiones anteriores se conservarán.')) { state.removeRoutine(editing.id); setEditing(null); } }} />}
   </div>;
 }
-
-function ExerciseLogger({ log, exerciseName, onUpdate, onToggle }: { log: WorkoutExerciseLog; exerciseName: string; onUpdate: (index: number, field: 'weight' | 'reps' | 'rir', value: number) => void; onToggle: (index: number) => void }) {
-  return <section className="exercise-logger"><div className="exercise-logger-title"><Dumbbell size={16} /><strong>{exerciseName}</strong></div><div className="set-table"><div className="set-row header"><span>Set</span><span>kg</span><span>Reps</span><span>RIR</span><span /></div>{log.sets.map((set, index) => <div className={`set-row ${set.completed ? 'completed' : ''}`} key={set.id}><span>{index + 1}</span><input type="number" inputMode="decimal" value={set.weight || ''} onChange={(event) => onUpdate(index, 'weight', Number(event.target.value))} /><input type="number" inputMode="numeric" value={set.reps || ''} onChange={(event) => onUpdate(index, 'reps', Number(event.target.value))} /><input type="number" inputMode="numeric" value={set.rir ?? ''} onChange={(event) => onUpdate(index, 'rir', Number(event.target.value))} /><button onClick={() => onToggle(index)}>{set.completed && <Check size={14} />}</button></div>)}</div></section>;
+function RoutineEditor({ routine, onClose, onSave, onDelete }: { routine: Routine; onClose: () => void; onSave: (routine: Routine) => void; onDelete: () => void }) {
+  const exercises = useWorkspace((state) => state.exercises);
+  const [draft, setDraft] = useState(routine);
+  const [adding, setAdding] = useState('');
+  useEffect(() => { const close = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); }; window.addEventListener('keydown', close); return () => window.removeEventListener('keydown', close); }, [onClose]);
+  return <div className="modal-backdrop" onMouseDown={onClose}><form className="gym-routine-editor gym-paper" role="dialog" aria-label="Editar rutina" onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); if (draft.name.trim()) onSave({ ...draft, name: draft.name.trim() }); }}><div className="gym-section-title"><input aria-label="Nombre de rutina" placeholder="Nombre de rutina" autoFocus required value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /><button type="button" className="gym-icon" aria-label="Cerrar rutina" onClick={onClose}><X size={16} /></button></div><p className="gym-muted">Ejercicio · series · repeticiones</p><div className="gym-routine-rows">{draft.exercises.map((entry, index) => <div key={entry.exerciseId}><span>{exercises.find((exercise) => exercise.id === entry.exerciseId)?.name}</span><input aria-label="Series objetivo" type="number" min="1" max="20" required value={entry.targetSets} onChange={(event) => setDraft({ ...draft, exercises: draft.exercises.map((item, i) => i === index ? { ...item, targetSets: Math.min(20, Math.max(1, Number(event.target.value))) } : item) })} /><input aria-label="Rango de repeticiones" value={entry.repRange} required onChange={(event) => setDraft({ ...draft, exercises: draft.exercises.map((item, i) => i === index ? { ...item, repRange: event.target.value } : item) })} /><button type="button" className="gym-icon" disabled={!index} aria-label="Subir ejercicio de rutina" onClick={() => { const next = [...draft.exercises]; [next[index - 1], next[index]] = [next[index], next[index - 1]]; setDraft({ ...draft, exercises: next }); }}><ArrowUp size={13} /></button><button type="button" className="gym-icon" aria-label="Quitar ejercicio de rutina" onClick={() => setDraft({ ...draft, exercises: draft.exercises.filter((_, i) => i !== index) })}><X size={13} /></button></div>)}</div><div className="gym-add-exercise"><select aria-label="Ejercicio para rutina" value={adding} onChange={(event) => setAdding(event.target.value)}><option value="">Elige un ejercicio…</option>{exercises.filter((exercise) => !draft.exercises.some((entry) => entry.exerciseId === exercise.id)).map((exercise) => <option key={exercise.id} value={exercise.id}>{exercise.name}</option>)}</select><button type="button" className="gym-link" disabled={!adding} onClick={() => { setDraft({ ...draft, exercises: [...draft.exercises, { exerciseId: adding, targetSets: 3, repRange: '8-12' }] }); setAdding(''); }}><Plus size={15} /></button></div><div className="gym-session-footer"><button type="button" className="gym-icon danger" aria-label="Eliminar rutina" onClick={onDelete}><Trash2 size={15} /></button><button className="gym-primary" type="submit">Guardar</button></div></form></div>;
 }
-
-function ProgressChart({ values }: { values: number[] }) {
-  const width = 520, height = 150, padding = 18;
-  if (values.length < 2) return <div className="chart-empty">Log two workouts to see a trend.</div>;
-  const min = Math.min(...values) - 2, max = Math.max(...values) + 2;
-  const points = values.map((value, index) => `${padding + index * ((width - padding * 2) / (values.length - 1))},${height - padding - ((value - min) / (max - min)) * (height - padding * 2)}`).join(' ');
-  return <svg className="progress-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Incline press progress chart"><defs><linearGradient id="chart-fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="var(--accent)" stopOpacity=".28" /><stop offset="1" stopColor="var(--accent)" stopOpacity="0" /></linearGradient></defs><polygon points={`${padding},${height - padding} ${points} ${width - padding},${height - padding}`} fill="url(#chart-fill)" /><polyline points={points} fill="none" stroke="var(--accent)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />{points.split(' ').map((point, index) => { const [cx, cy] = point.split(','); return <circle key={index} cx={cx} cy={cy} r="4" fill="var(--surface)" stroke="var(--accent)" strokeWidth="2" />; })}</svg>;
+function ProgressChart({ points }: { points: { date: string; weight: number }[] }) {
+  if (!points.length) return <div className="gym-chart-empty">Completa una serie para empezar a ver tu progreso.</div>;
+  const max = Math.max(1, ...points.map((point) => point.weight)) * 1.15;
+  const positions = points.map((point, index) => ({ x: points.length === 1 ? 250 : 30 + index * 440 / (points.length - 1), y: 135 - point.weight / max * 110 }));
+  return <svg className="gym-chart" viewBox="0 0 500 180" role="img" aria-label="Progreso del ejercicio"><line x1="25" x2="475" y1="135" y2="135" stroke="var(--line)" /><polyline fill="none" stroke="var(--accent)" strokeWidth="2" points={positions.map((point) => `${point.x},${point.y}`).join(' ')} />{positions.map((point, index) => <g key={index}><circle cx={point.x} cy={point.y} r="4" fill="var(--accent)" /><text x={point.x} y={point.y - 12} textAnchor="middle">{number(points[index].weight)} kg</text><text x={point.x} y="160" textAnchor="middle">{points[index].date}</text></g>)}</svg>;
 }

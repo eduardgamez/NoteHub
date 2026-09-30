@@ -1,7 +1,7 @@
 import { deletionSnapshotMatches, deletionSnapshotHasId } from '../ai/deletionProposal';
 import { create } from 'zustand';
 import { seedWorkspace } from '../data/seed';
-import { loadWorkspace, scheduleSave } from '../lib/storage';
+import { loadWorkspace, preserveWorkspace, scheduleSave } from '../lib/storage';
 import { syncEngine, type SyncOperation } from '../sync/syncEngine';
 import { cloudSync } from '../sync/cloudSync';
 import { makeBlock } from '../lib/blockFactory';
@@ -11,7 +11,7 @@ import { isStarterWorkspace } from '../lib/starterWorkspace';
 import { updateAIProfile, migrateAIProfileText, profileSummary, validProfileUpdates } from '../ai/personalProfile';
 import type {
   AITextSelection, AppView, CalendarEvent, CanvasBlock, ChatMessageRecord, ChatSession, Exercise, Folder, FolderContext, InkStroke,
-  Note, PendingProposal, ProfileField, ProfileUpdate, Project, Task, ToolMode, Workout, WorkspaceStateData,
+  Note, PendingProposal, ProfileField, ProfileUpdate, Project, Routine, Task, ToolMode, Workout, WorkspaceStateData,
 } from '../types';
 
 interface WorkspaceStore extends WorkspaceStateData {
@@ -79,6 +79,9 @@ interface WorkspaceStore extends WorkspaceStateData {
   addWorkout: (workout: Workout) => void;
   updateWorkout: (workout: Workout) => void;
   addExercise: (exercise: Exercise) => void;
+  upsertRoutine: (routine: Routine) => void;
+  removeRoutine: (id: string) => void;
+  removeWorkout: (id: string) => void;
   removeUnansweredChatMessages: (threadId: string, messageIds: string[]) => boolean;
   appendChatMessage: (threadId: string, message: ChatMessageRecord) => void;
   createChatSession: (scope: string) => string;
@@ -92,7 +95,8 @@ interface WorkspaceStore extends WorkspaceStateData {
   updateProposal: (id: string, changes: Partial<Pick<PendingProposal, 'title' | 'description' | 'before' | 'after' | 'payload'>>) => void;
   resolveProposal: (id: string, resolution: 'approved' | 'rejected') => void;
   hydrate: () => Promise<void>;
-  applyRemote: (operation: SyncOperation) => void;
+  finishSyncRecovery: () => void;
+  applyRemote: (operation: SyncOperation, rememberOnly?: boolean, force?: boolean) => void;
 }
 
 let blockClipboard: CanvasBlock[] = [];
@@ -122,6 +126,9 @@ const demoTemplateIds = new Set(['template-university']);
 
 export const workspaceDataFrom = (state: WorkspaceStore): WorkspaceStateData => ({
   version: state.version,
+  syncReceipts: state.syncReceipts,
+  syncHistoryReady: state.syncHistoryReady,
+  syncUserId: state.syncUserId,
   projects: state.projects,
   folders: state.folders,
   notes: state.notes,
@@ -458,6 +465,9 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
   toggleTaskItem(taskId, itemId) { set((state) => ({ tasks: state.tasks.map((task) => task.id === taskId ? { ...task, checklist: task.checklist.map((item) => item.id === itemId ? { ...item, done: !item.done } : item) } : task) })); persist(get()); const task = get().tasks.find((item) => item.id === taskId); if (task) syncEngine.publish({ kind: 'task.upsert', task }); },
   addWorkout(workout) { set((state) => ({ workouts: [...state.workouts, workout] })); persist(get()); syncEngine.publish({ kind: 'workout.upsert', workout }); },
   updateWorkout(workout) { set((state) => ({ workouts: state.workouts.map((item) => item.id === workout.id ? workout : item) })); persist(get()); syncEngine.publish({ kind: 'workout.upsert', workout }); },
+  upsertRoutine(routine) { set((state) => ({ routines: state.routines.some((item) => item.id === routine.id) ? state.routines.map((item) => item.id === routine.id ? routine : item) : [...state.routines, routine] })); persist(get()); syncEngine.publish({ kind: 'routine.upsert', routine }); },
+  removeRoutine(id) { set((state) => ({ routines: state.routines.filter((item) => item.id !== id) })); persist(get()); syncEngine.publish({ kind: 'routine.remove', routineId: id }); },
+  removeWorkout(id) { set((state) => ({ workouts: state.workouts.filter((item) => item.id !== id) })); persist(get()); syncEngine.publish({ kind: 'workout.remove', workoutId: id }); },
   addExercise(exercise) { set((state) => ({ exercises: [...state.exercises, exercise] })); persist(get()); syncEngine.publish({ kind: 'exercise.upsert', exercise }); },
   createChatSession(scope) {
     const id = crypto.randomUUID();
@@ -622,12 +632,14 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
   async hydrate() {
     try {
       const stored = await loadWorkspace();
-      const remote = await cloudSync.loadSnapshot();
-      const localData = stored ? migrate(stored) : null;
+      if (stored) await preserveWorkspace(stored).catch(() => {});
+      const remote = await cloudSync.loadSnapshot().catch(() => null);
+      const userId = await cloudSync.sessionUserId().catch(() => undefined);
+      const localData = stored && (!userId || !stored.syncUserId || stored.syncUserId === userId) ? migrate(stored) : null;
       const remoteData = remote ? migrate(remote) : null;
-      const keepLocal = Boolean(localData && remoteData && isStarterWorkspace(remoteData) && !isStarterWorkspace(localData));
+      const keepLocal = Boolean(localData && !isStarterWorkspace(localData));
       const data = keepLocal ? localData! : remoteData ?? localData ?? { ...seedWorkspace, notes: Object.fromEntries(Object.entries(seedWorkspace.notes).map(([id, note]) => [id, ensureTitleBlock(note)])) };
-      set({ ...data, activeProjectId: data.notes[data.activeNoteId]?.projectId ?? data.projects[0]?.id ?? '', hydrated: true });
+      set({ ...data, syncUserId: userId ?? data.syncUserId, activeProjectId: data.notes[data.activeNoteId]?.projectId ?? data.projects[0]?.id ?? '', hydrated: true });
       const source = stored ?? remote;
       const hadDemoItems = Boolean(source?.calendarEvents?.some((event) => demoEventIds.has(event.id))
         || source?.tasks?.some((task) => demoTaskIds.has(task.id))
@@ -635,7 +647,12 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
       if (!remote || keepLocal || hadDemoItems) persist(get());
     } catch { set({ hydrated: true }); }
   },
-  applyRemote(operation) {
+  finishSyncRecovery() { set({ syncHistoryReady: true }); persist(get()); },
+  applyRemote(operation, rememberOnly = false, force = false) {
+    const known = get().syncReceipts?.includes(operation.opId);
+    if (known && !force) return;
+    if (!known) set((state) => ({ syncReceipts: [...(state.syncReceipts ?? []), operation.opId] }));
+    if (rememberOnly) { persist(get()); return; }
     if (operation.kind === 'profile.upsert' && operation.profile.updatedAt >= get().personalProfile.updatedAt) set({ personalProfile: {
       ...operation.profile,
       answers: Object.fromEntries(Object.entries(operation.profile.answers).map(([field, value]) => [field, migrateAIProfileText(value)])),
@@ -680,6 +697,9 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
     if (operation.kind === 'event.remove') set((state) => ({ calendarEvents: state.calendarEvents.filter((event) => event.id !== operation.eventId) }));
     if (operation.kind === 'task.upsert' && !demoTaskIds.has(operation.task.id)) set((state) => ({ tasks: state.tasks.some((item) => item.id === operation.task.id) ? state.tasks.map((item) => item.id === operation.task.id ? operation.task : item) : [...state.tasks, operation.task] }));
     if (operation.kind === 'task.remove') set((state) => ({ tasks: state.tasks.filter((item) => item.id !== operation.taskId) }));
+    if (operation.kind === 'routine.upsert') set((state) => ({ routines: state.routines.some((item) => item.id === operation.routine.id) ? state.routines.map((item) => item.id === operation.routine.id ? operation.routine : item) : [...state.routines, operation.routine] }));
+    if (operation.kind === 'routine.remove') set((state) => ({ routines: state.routines.filter((item) => item.id !== operation.routineId) }));
+    if (operation.kind === 'workout.remove') set((state) => ({ workouts: state.workouts.filter((item) => item.id !== operation.workoutId) }));
     if (operation.kind === 'workout.upsert') set((state) => ({ workouts: state.workouts.some((item) => item.id === operation.workout.id) ? state.workouts.map((item) => item.id === operation.workout.id ? operation.workout : item) : [...state.workouts, operation.workout] }));
     if (operation.kind === 'exercise.upsert') set((state) => ({ exercises: state.exercises.some((item) => item.id === operation.exercise.id) ? state.exercises.map((item) => item.id === operation.exercise.id ? operation.exercise : item) : [...state.exercises, operation.exercise] }));
     if (operation.kind === 'chat.session.upsert') set((state) => ({ chatSessions: { ...state.chatSessions, [operation.session.id]: operation.session } }));

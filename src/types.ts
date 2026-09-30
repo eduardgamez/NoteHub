@@ -154,6 +154,9 @@ export interface PendingProposal {
 export type AppView = 'note' | 'project' | 'calendar' | 'gym' | 'settings' | 'context' | 'profile';
 
 export interface WorkspaceStateData {
+  syncReceipts?: string[];
+  syncHistoryReady?: boolean;
+  syncUserId?: string;
   version: number;
   projects: Project[];
   folders: Folder[];

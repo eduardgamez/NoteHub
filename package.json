@@ -12,10 +12,15 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:e2e": "node tests/smoke.mjs",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "ios:sync": "npm run build && cap sync ios && node scripts/prepare-ios.mjs",
+    "ios:open": "cap open ios",
+    "ios:build": "npm run ios:sync && xcodebuild -project ios/App/App.xcodeproj -scheme App -sdk iphonesimulator -destination \"generic/platform=iOS Simulator\" -derivedDataPath /tmp/notehub-ios-build CODE_SIGNING_ALLOWED=NO build"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.127.0",
+    "@capacitor/core": "8.5.2",
+    "@capacitor/ios": "8.5.2",
     "@google/genai": "^2.23.0",
     "@supabase/supabase-js": "^2.116.0",
     "@vitejs/plugin-react": "latest",
@@ -39,6 +44,7 @@
     "zustand": "latest"
   },
   "devDependencies": {
+    "@capacitor/cli": "8.5.2",
     "@eslint/js": "latest",
     "@testing-library/jest-dom": "latest",
     "@testing-library/react": "latest",

@@ -1,3 +1,6 @@
+import { WorkspaceBackups } from './WorkspaceBackups';
+import { isNativeIOS } from '../../native/bridge';
+import { NativeSettings } from '../../native/NativeSettings';
 import { useEffect, useState } from 'react';
 import { Check, Cloud, KeyRound, Laptop, Moon, RefreshCw, Save, Server, ShieldCheck, Sun, Trash2 } from 'lucide-react';
 import { beginCodexLogin, getActiveProvider, getCodexLoginStatus, getProviderStatus, setActiveProvider, type CodexLoginState, type ProviderId, type ProviderStatus } from '../../ai/provider';
@@ -13,6 +16,8 @@ const providers: Array<{ id: ProviderId; name: string }> = [
 export function SettingsView() {
   const { theme, followsSystem, chooseTheme, useSystemTheme } = useTheme();
   const [active, setActive] = useState<ProviderId>(getActiveProvider());
+  const native = isNativeIOS();
+  const [serverRevision, setServerRevision] = useState(0);
   const [status, setStatus] = useState<ProviderStatus | null>(null);
   const [localKeys, setLocalKeys] = useState<Record<ProviderId, boolean>>({ openai: false, anthropic: false, gemini: false, codex: false });
   const [keyDraft, setKeyDraft] = useState('');
@@ -39,7 +44,7 @@ export function SettingsView() {
       if (current) { setStatus(result); setChecking(false); }
     });
     return () => { current = false; };
-  }, [active]);
+  }, [active, serverRevision]);
 
   useEffect(() => {
     if (codexLogin.status !== 'pending') return;
@@ -109,10 +114,10 @@ export function SettingsView() {
 
   return <div className="module-view settings-view"><div className="module-header"><div><p className="eyebrow">WORKSPACE</p><h1>Settings</h1><p>Appearance, secure AI providers, and synchronization.</p></div></div>
     <section className="settings-section"><div className="settings-copy"><div className="settings-icon"><Sun size={18} /></div><div><h2>Appearance</h2><p>Follow your device or keep a manual theme across sessions.</p></div></div><div className="theme-setting"><button className={followsSystem ? 'active' : ''} onClick={useSystemTheme}><Laptop size={15} /> System</button><button className={!followsSystem && theme === 'light' ? 'active' : ''} onClick={() => chooseTheme('light')}><Sun size={15} /> Light</button><button className={!followsSystem && theme === 'dark' ? 'active' : ''} onClick={() => chooseTheme('dark')}><Moon size={15} /> Dark</button></div></section>
-    <section className="settings-section column"><div className="settings-copy"><div className="settings-icon purple"><KeyRound size={18} /></div><div><h2>AI provider</h2><p>Choose Codex for ChatGPT sign-in, or use another provider with an API key.</p></div></div><div className="provider-list">{providers.map((provider) => <button className={active === provider.id ? 'active' : ''} onClick={() => choose(provider.id)} key={provider.id}><span className="provider-logo">{provider.name[0]}</span><span><strong>{provider.name}</strong><small>{provider.id === 'codex' ? active !== 'codex' ? 'ChatGPT account' : checking ? 'Checking this computer…' : status?.codex ? 'Connected on this computer' : status?.codexInstalled ? 'Connect your ChatGPT account' : 'Install Codex first' : localKeys[provider.id] ? 'Saved on this device' : status?.[provider.id] ? 'Configured by server' : 'Not configured'}</small></span><i className={localKeys[provider.id] || (provider.id !== 'codex' || active === 'codex') && status?.[provider.id] ? 'connected' : ''}>{active === provider.id ? <Check size={14} /> : checking ? <RefreshCw size={13} /> : null}</i></button>)}</div>
+    <section className="settings-section column"><div className="settings-copy"><div className="settings-icon purple"><KeyRound size={18} /></div><div><h2>AI provider</h2><p>Choose Codex for ChatGPT sign-in, or use another provider with an API key.</p></div></div><div className="provider-list">{providers.map((provider) => <button className={active === provider.id ? 'active' : ''} onClick={() => choose(provider.id)} key={provider.id}><span className="provider-logo">{provider.name[0]}</span><span><strong>{provider.name}</strong><small>{provider.id === 'codex' ? active !== 'codex' ? 'ChatGPT account' : checking ? native ? 'Comprobando servidor…' : 'Checking this computer…' : status?.codex ? native ? 'Conectado al Mac' : 'Connected on this computer' : status?.codexInstalled ? 'Connect your ChatGPT account' : native ? 'Configura tu servidor' : 'Install Codex first' : localKeys[provider.id] ? 'Saved on this device' : status?.[provider.id] ? 'Configured by server' : 'Not configured'}</small></span><i className={localKeys[provider.id] || (provider.id !== 'codex' || active === 'codex') && status?.[provider.id] ? 'connected' : ''}>{active === provider.id ? <Check size={14} /> : checking ? <RefreshCw size={13} /> : null}</i></button>)}</div>
       {active === 'codex' && <div className="codex-sign-in">
-        <p>{checking ? 'Comprobando Codex…' : status?.codex ? 'Tu cuenta de ChatGPT está conectada a Codex en este ordenador.' : status?.codexInstalled ? 'Conecta tu cuenta de ChatGPT para usar Codex sin clave API.' : <>Instala <a href="https://learn.chatgpt.com/docs/codex/cli" target="_blank" rel="noopener noreferrer">Codex</a> en este ordenador y vuelve a abrir Ajustes.</>}</p>
-        {!checking && status?.codexInstalled && codexLogin.status !== 'pending' && <button className="secondary-button" type="button" onClick={() => void connectCodex()}>{status?.codex ? 'Cambiar cuenta' : 'Conectar ChatGPT'}</button>}
+        <p>{native ? checking ? 'Comprobando Codex en tu servidor…' : status?.codex ? 'Conectado a Codex en tu Mac.' : 'Configura el servidor de IA e inicia sesión con el correo autorizado en tu Mac. Conecta ChatGPT desde el ordenador.' : checking ? 'Comprobando Codex…' : status?.codex ? 'Tu cuenta de ChatGPT está conectada a Codex en este ordenador.' : status?.codexInstalled ? 'Conecta tu cuenta de ChatGPT para usar Codex sin clave API.' : <>Instala <a href="https://learn.chatgpt.com/docs/codex/cli" target="_blank" rel="noopener noreferrer">Codex</a> en este ordenador y vuelve a abrir Ajustes.</>}</p>
+        {!native && !checking && status?.codexInstalled && codexLogin.status !== 'pending' && <button className="secondary-button" type="button" onClick={() => void connectCodex()}>{status?.codex ? 'Cambiar cuenta' : 'Conectar ChatGPT'}</button>}
         {codexLogin.status === 'pending' && codexLogin.verificationUrl && <p>Abre <a href={codexLogin.verificationUrl} target="_blank" rel="noopener noreferrer">ChatGPT</a> e introduce este código: <strong>{codexLogin.userCode}</strong></p>}
         {codexLogin.status === 'complete' && <p>Cuenta conectada.</p>}
         {codexLogin.status === 'failed' && <p>{codexLogin.message}</p>}
@@ -123,6 +128,7 @@ export function SettingsView() {
     <section className="settings-section column"><div className="settings-copy"><div className="settings-icon purple"><ShieldCheck size={18} /></div><div><h2>AI permissions</h2><p>Read access is explicit. Writes always remain proposal-only regardless of these settings.</p></div></div><div className="permission-grid">{([
       ['readCurrentFile', 'Read current file'], ['searchFiles', 'Search other files'], ['readProjectContext', 'Read project memory'], ['inspectCalendar', 'Inspect calendar & tasks'], ['inspectGym', 'Inspect gym history'],
     ] as Array<[keyof AIPermissions, string]>).map(([key, label]) => <label key={key}><span>{label}</span><button className={permissions[key] ? 'enabled' : ''} onClick={() => togglePermission(key)} aria-pressed={permissions[key]}><i /></button></label>)}</div></section>
+    <WorkspaceBackups /><NativeSettings onServerChange={() => { setChecking(true); setServerRevision((revision) => revision + 1); }} />
     <section className="settings-section sync-settings"><div className="settings-copy"><div className="settings-icon"><Cloud size={18} /></div><div><h2>Multi-device sync</h2><p>{syncStatus.connected ? <>Signed in as <strong>{syncStatus.email}</strong>. Your session stays signed in on this device until you sign out. Changes sync live and offline operations remain queued.</> : syncStatus.configured ? 'Sign in with the same email on every device to share the workspace.' : 'Local-first mode is active. Configure Supabase to enable real-time device sync.'}</p></div></div>
       {syncStatus.connected ? <form onSubmit={saveSyncPassword}>
         <input type="password" autoComplete="new-password" minLength={12} required value={syncPassword} onChange={(event) => setSyncPassword(event.target.value)} placeholder="New sync password" aria-label="New sync password" />

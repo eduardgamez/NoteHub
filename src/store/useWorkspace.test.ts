@@ -4,12 +4,23 @@ import { loadWorkspace } from '../lib/storage';
 import { cloudSync } from '../sync/cloudSync';
 import type { PendingProposal } from '../types';
 
-vi.mock('../lib/storage', () => ({ loadWorkspace: vi.fn(), scheduleSave: vi.fn() }));
+vi.mock('../lib/storage', () => ({ loadWorkspace: vi.fn(), preserveWorkspace: vi.fn().mockResolvedValue(undefined), scheduleSave: vi.fn() }));
 vi.mock('../sync/syncEngine', () => ({ syncEngine: { publish: vi.fn(), subscribe: vi.fn() } }));
 
 import { useWorkspace } from './useWorkspace';
 
 describe('workspace hydration across devices', () => {
+  it('does not load a previous account workspace into a different account', async () => {
+    const local = { ...structuredClone(seedWorkspace), syncUserId: 'previous-user', projects: [{ id: 'private-old', title: 'Old', emoji: '◇', context: [] }] };
+    const remote = { ...structuredClone(seedWorkspace), syncUserId: 'current-user', projects: [{ id: 'current', title: 'Current', emoji: '◇', context: [] }] };
+    vi.mocked(loadWorkspace).mockResolvedValueOnce(local);
+    vi.spyOn(cloudSync, 'loadSnapshot').mockResolvedValueOnce(remote);
+    vi.spyOn(cloudSync, 'sessionUserId').mockResolvedValueOnce('current-user');
+    await useWorkspace.getState().hydrate();
+    expect(useWorkspace.getState().projects.map((project) => project.id)).toEqual(['current']);
+    expect(useWorkspace.getState().syncUserId).toBe('current-user');
+  });
+
   it('loads the account workspace when this browser has local starter data', async () => {
     const local = structuredClone(seedWorkspace);
     const remote = structuredClone(seedWorkspace);
@@ -28,6 +39,19 @@ describe('workspace hydration across devices', () => {
     await useWorkspace.getState().hydrate();
     expect(useWorkspace.getState().projects.some((project) => project.id === 'my-project')).toBe(true);
   });
+  it('does not replace local conversations and calendar entries with an older populated cloud snapshot', async () => {
+    const local = structuredClone(seedWorkspace);
+    local.chatThreads['latest'] = [{ id: 'latest-message', role: 'user', content: 'Latest conversation', createdAt: Date.now() }];
+    local.calendarEvents.push({ id: 'latest-event', title: 'Latest event', start: '2026-09-30T10:00:00Z', end: '2026-09-30T11:00:00Z', color: 'green' });
+    const remote = structuredClone(seedWorkspace);
+    remote.projects.push({ id: 'old-cloud', title: 'Old populated cloud', emoji: '◇', context: [] });
+    vi.mocked(loadWorkspace).mockResolvedValueOnce(local);
+    vi.spyOn(cloudSync, 'loadSnapshot').mockResolvedValueOnce(remote);
+    await useWorkspace.getState().hydrate();
+    expect(useWorkspace.getState().chatThreads['latest'][0].id).toBe('latest-message');
+    expect(useWorkspace.getState().calendarEvents.some((event) => event.id === 'latest-event')).toBe(true);
+  });
+
 });
 
 const proposal: PendingProposal = {

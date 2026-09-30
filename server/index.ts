@@ -10,6 +10,7 @@ import { isGeminiQuotaExceeded, isGeminiUnavailable, runGeminiWithFailover } fro
 import { selectGeminiModels } from './geminiModels';
 import { beginCodexLogin, codexAvailable, codexInstalled, codexLoginStatus, completeWithCodex, listCodexModels } from './codexAppServer';
 import { parseModelResponse } from './parseModelResponse';
+import { remoteCodexAccess } from './codexAccess';
 
 type ProviderId = 'openai' | 'anthropic' | 'gemini' | 'codex';
 interface Message { role: 'user' | 'assistant'; content: string }
@@ -22,7 +23,7 @@ const requireAuth = process.env.NOTEHUB_REQUIRE_AUTH === 'true';
 const supabaseUrl = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL;
 const supabasePublishableKey = process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? process.env.SUPABASE_ANON_KEY ?? process.env.VITE_SUPABASE_ANON_KEY;
 const authClient = supabaseUrl && supabasePublishableKey ? createClient(supabaseUrl, supabasePublishableKey, { auth: { persistSession: false, autoRefreshToken: false } }) : null;
-app.use(cors({ origin: process.env.NOTEHUB_WEB_ORIGIN?.split(',') ?? ['http://localhost:5173', 'http://127.0.0.1:5173'] }));
+app.use(cors({ origin: process.env.NOTEHUB_WEB_ORIGIN?.split(',') ?? ['http://localhost:5173', 'http://127.0.0.1:5173', 'capacitor://localhost'] }));
 app.use(express.json({ limit: '18mb' }));
 
 const localRequest = (request: express.Request) => {
@@ -36,17 +37,19 @@ const localRequest = (request: express.Request) => {
   }
   return true;
 };
-const configured = (request: express.Request, checkCodex: boolean) => ({
+const codexAccess = (request: express.Request) => localRequest(request) ? Promise.resolve(true) : remoteCodexAccess(authClient, request.headers.authorization, process.env.NOTEHUB_CODEX_REMOTE_EMAILS ?? '');
+const configured = (canUseCodex: boolean, checkCodex: boolean) => ({
   openai: Boolean(process.env.OPENAI_API_KEY),
   anthropic: Boolean(process.env.ANTHROPIC_API_KEY),
   gemini: Boolean(process.env.GEMINI_API_KEY),
-  codex: checkCodex && localRequest(request) && codexAvailable(),
+  codex: checkCodex && canUseCodex && codexAvailable(),
 });
 
 app.get('/api/health', (_request, response) => response.json({ ok: true, authRequired: requireAuth }));
-app.get('/api/ai/status', (request, response) => {
+app.get('/api/ai/status', async (request, response) => {
   const checkCodex = request.query.codex === '1';
-  response.json({ providers: configured(request, checkCodex), codexInstalled: checkCodex && localRequest(request) && codexInstalled(), models: {
+  const canUseCodex = checkCodex && await codexAccess(request);
+  response.json({ providers: configured(canUseCodex, checkCodex), codexInstalled: canUseCodex && codexInstalled(), models: {
   openai: process.env.OPENAI_MODEL ?? 'gpt-5-mini',
   anthropic: process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-5-20250929',
   gemini: process.env.GEMINI_MODEL ?? 'gemini-3.8-flash',
@@ -76,7 +79,7 @@ app.get('/api/ai/codex/login', aiAuth, (request, response) => {
   response.json(codexLoginStatus());
 });
 app.get('/api/ai/codex/models', aiAuth, async (request, response) => {
-  if (!localRequest(request) || !codexAvailable()) { response.status(503).json({ error: 'Codex is not signed in on this computer.' }); return; }
+  if (!await codexAccess(request) || !codexAvailable()) { response.status(503).json({ error: 'Codex is not signed in on this computer.' }); return; }
   try { response.json({ models: await listCodexModels() }); }
   catch { response.status(502).json({ error: 'Could not list Codex models.' }); }
 });
@@ -106,7 +109,7 @@ app.post('/api/ai/complete', aiAuth, async (request, response) => {
   if (!body || !['openai', 'anthropic', 'gemini', 'codex'].includes(body.provider) || !Array.isArray(body.messages)) {
     response.status(400).json({ error: 'Invalid AI request.' }); return;
   }
-  if (body.provider === 'codex' && (!localRequest(request) || !codexAvailable())) {
+  if (body.provider === 'codex' && (!await codexAccess(request) || !codexAvailable())) {
     response.status(503).json({ error: 'Codex is not signed in on this computer. Run codex login, then try again.' }); return;
   }
   const apiKey = typeof body.providerKey === 'string' && body.providerKey.trim() ? body.providerKey.trim() : providerEnvironmentKey(body.provider);

@@ -1,0 +1,46 @@
+import { applyNativeAction } from './actions';
+import { useEffect } from 'react';
+import { useWorkspace, workspaceDataFrom } from '../store/useWorkspace';
+import { saveWorkspace } from '../lib/storage';
+import { isNativeIOS, nativeBridge, nativeItems } from './bridge';
+
+export function NativeRuntime() {
+  const hydrated = useWorkspace((state) => state.hydrated);
+  useEffect(() => {
+    if (!hydrated || !isNativeIOS()) return;
+    document.documentElement.classList.add('native-ios');
+    let running = false, again = false, stopped = false;
+    let lastSynced: Pick<ReturnType<typeof useWorkspace.getState>, 'tasks' | 'calendarEvents'> | undefined;
+    let syncedAt = 0;
+    const refresh = async () => {
+      if (running) { again = true; return; }
+      running = true;
+      try {
+        do {
+          again = false;
+          const { actions } = await nativeBridge.pendingActions();
+          actions.forEach(applyNativeAction);
+          if (actions.length) {
+            await saveWorkspace(workspaceDataFrom(useWorkspace.getState()));
+            await nativeBridge.acknowledge({ ids: actions.map((action) => action.id) });
+          }
+          const state = useWorkspace.getState();
+          if (!lastSynced || state.tasks !== lastSynced.tasks || state.calendarEvents !== lastSynced.calendarEvents || Date.now() - syncedAt > 15 * 60000) {
+            await nativeBridge.sync({ items: nativeItems(state.tasks, state.calendarEvents) });
+            lastSynced = state; syncedAt = Date.now();
+          }
+        } while (again && !stopped);
+      } catch (error) { console.warn('NoteHub native reminders:', error); }
+      finally { running = false; }
+    };
+    const visible = () => { if (!document.hidden) void refresh(); };
+    const foreground = () => { syncedAt = 0; visible(); };
+    const unsubscribe = useWorkspace.subscribe((state, previous) => { if (state.tasks !== previous.tasks || state.calendarEvents !== previous.calendarEvents) void refresh(); });
+    document.addEventListener('visibilitychange', foreground);
+    window.addEventListener('focus', foreground);
+    const timer = window.setInterval(visible, 5000);
+    void refresh();
+    return () => { stopped = true; unsubscribe(); clearInterval(timer); document.removeEventListener('visibilitychange', foreground); window.removeEventListener('focus', foreground); };
+  }, [hydrated]);
+  return null;
+}

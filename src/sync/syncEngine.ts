@@ -1,4 +1,4 @@
-import type { CalendarEvent, CanvasBlock, ChatMessageRecord, ChatSession, Exercise, Folder, FolderContext, InkStroke, Note, PendingProposal, PersonalProfile, Project, Task, Workout, WorkspaceStateData } from '../types';
+import type { CalendarEvent, CanvasBlock, ChatMessageRecord, ChatSession, Exercise, Folder, FolderContext, InkStroke, Note, PendingProposal, PersonalProfile, Project, Routine, Task, Workout, WorkspaceStateData } from '../types';
 import { cloudSync } from './cloudSync';
 
 export type SyncPayload =
@@ -24,6 +24,9 @@ export type SyncPayload =
   | { kind: 'task.upsert'; task: Task }
   | { kind: 'task.remove'; taskId: string }
   | { kind: 'workout.upsert'; workout: Workout }
+  | { kind: 'workout.remove'; workoutId: string }
+  | { kind: 'routine.upsert'; routine: Routine }
+  | { kind: 'routine.remove'; routineId: string }
   | { kind: 'exercise.upsert'; exercise: Exercise }
   | { kind: 'chat.messages.remove'; threadId: string; messageIds: string[] }
   | { kind: 'chat.message'; threadId: string; message: ChatMessageRecord }
@@ -32,14 +35,17 @@ export type SyncPayload =
   | { kind: 'proposal.upsert'; proposal: PendingProposal }
   | { kind: 'profile.upsert'; profile: PersonalProfile };
 
-export type SyncOperation = SyncPayload & { source: string; timestamp: number; opId: string };
+export type SyncOperation = SyncPayload & { source: string; timestamp: number; opId: string; userId?: string };
 const source = crypto.randomUUID();
 const channel = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel('notehub-sync-v2');
 const seen = new Set<string>();
-const listeners = new Set<(operation: SyncOperation) => void>();
+const listeners = new Set<(operation: SyncOperation, rememberOnly?: boolean, force?: boolean) => void>();
 let remoteStarted = false;
+let snapshotSource: (() => WorkspaceStateData) | undefined;
 
 function deliver(operation: SyncOperation) {
+  const owner = snapshotSource?.()?.syncUserId;
+  if (operation.userId && owner && operation.userId !== owner) return;
   if (operation.source === source || seen.has(operation.opId)) return;
   seen.add(operation.opId);
   if (seen.size > 4000) seen.delete(seen.values().next().value!);
@@ -51,14 +57,31 @@ channel?.addEventListener('message', (event: MessageEvent<SyncOperation>) => del
 export const syncEngine = {
   source,
   publish(payload: SyncPayload) {
-    const operation = { ...payload, source, timestamp: Date.now(), opId: crypto.randomUUID() } as SyncOperation;
+    const operation = { ...payload, source, timestamp: Date.now(), opId: crypto.randomUUID(), userId: snapshotSource?.()?.syncUserId } as SyncOperation;
     seen.add(operation.opId);
+    listeners.forEach((listener) => listener(operation, true));
     channel?.postMessage(operation);
     void cloudSync.publish(operation);
   },
-  subscribe(listener: (operation: SyncOperation) => void, getSnapshot?: () => WorkspaceStateData) {
+  subscribe(listener: (operation: SyncOperation, rememberOnly?: boolean, force?: boolean) => void, getSnapshot?: () => WorkspaceStateData, onHistoryApplied?: () => void) {
     listeners.add(listener);
-    if (!remoteStarted) { remoteStarted = true; void cloudSync.start(deliver, getSnapshot); }
+    snapshotSource = getSnapshot;
+    if (!remoteStarted) { remoteStarted = true; void cloudSync.start(deliver, getSnapshot,
+      (operation) => listeners.forEach((listener) => listener(operation, false, !['stroke.move', 'block.reorder'].includes(operation.kind))),
+      (operations) => {
+        const snapshot = getSnapshot?.();
+        const receipts = snapshot?.syncReceipts;
+        const known = new Set(receipts ?? []);
+        // Older workspaces have no receipts. Recover calendar/chat with idempotent operations;
+        // do not move existing drawings or reorder blocks a second time during migration.
+        const safeToRecover = /^(event\.|task\.|chat\.|proposal\.|profile\.|routine\.|workout\.|exercise\.)/;
+        for (const operation of operations) {
+          if (known.has(operation.opId)) continue;
+          listeners.forEach((item) => item(operation, !snapshot?.syncHistoryReady && !safeToRecover.test(operation.kind)));
+          seen.add(operation.opId);
+        }
+        onHistoryApplied?.();
+      }).catch((error) => console.warn('Workspace sync will retry when reconnected.', error)); }
     return () => { listeners.delete(listener); };
   },
 };

@@ -1,3 +1,4 @@
+import { isNativeIOS } from '../native/bridge';
 import { useEffect, useState } from 'react';
 import { Download, RefreshCw, X } from 'lucide-react';
 
@@ -9,6 +10,7 @@ export function PWAStatus() {
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
+    if (isNativeIOS()) return;
     const captureInstall = (event: Event) => { event.preventDefault(); setInstallPrompt(event as InstallPromptEvent); };
     const refreshAfterActivation = () => window.location.reload();
     window.addEventListener('beforeinstallprompt', captureInstall);
@@ -17,6 +19,15 @@ export function PWAStatus() {
     const checkUpdate = () => { if (!document.hidden) void registration?.update().catch(() => {}); };
     window.addEventListener('focus', checkUpdate);
     document.addEventListener('visibilitychange', checkUpdate);
+    if ('serviceWorker' in navigator && import.meta.env.DEV) {
+      void navigator.serviceWorker.getRegistrations().then(async (registrations) => {
+        const base = new URL(import.meta.env.BASE_URL, location.origin).href;
+        const ours = registrations.filter((item) => item.scope === base && [item.active, item.waiting, item.installing].some((worker) => worker?.scriptURL === `${base}sw.js`));
+        await Promise.all(ours.map((item) => item.unregister()));
+        if ('caches' in window) await Promise.all((await caches.keys()).filter((key) => key.startsWith('notehub-shell-')).map((key) => caches.delete(key)));
+        if (ours.length && navigator.serviceWorker.controller && !sessionStorage.getItem('notehub-dev-cache-cleared')) { sessionStorage.setItem('notehub-dev-cache-cleared', '1'); location.reload(); }
+      });
+    }
     if ('serviceWorker' in navigator && import.meta.env.PROD) {
       void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`, { updateViaCache: 'none' }).then((registered) => {
         registration = registered;

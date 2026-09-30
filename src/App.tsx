@@ -1,3 +1,4 @@
+import { NativeRuntime } from './native/NativeRuntime';
 import { useEffect } from 'react';
 import { Sparkles } from 'lucide-react';
 import { AIPanel } from './components/AIPanel';
@@ -27,7 +28,7 @@ export function App() {
   const activeNoteId = useWorkspace((state) => state.activeNoteId);
 
   useEffect(() => { void hydrate(); }, [hydrate]);
-  useEffect(() => hydrated ? syncEngine.subscribe(applyRemote, () => workspaceDataFrom(useWorkspace.getState())) : undefined, [applyRemote, hydrated]);
+  useEffect(() => hydrated ? syncEngine.subscribe(applyRemote, () => workspaceDataFrom(useWorkspace.getState()), () => useWorkspace.getState().finishSyncRecovery()) : undefined, [applyRemote, hydrated]);
 
   useEffect(() => {
     const fitPanels = () => {
@@ -51,6 +52,6 @@ export function App() {
       {aiOpen && <AIPanel />}
       {!aiOpen && <button className="ai-panel-toggle" onClick={() => setAiOpen(true)} aria-label="Open AI panel"><Sparkles size={17} /></button>}
     </div> : <div className="standalone-view">{activeView === 'gym' ? <GymView /> : activeView === 'profile' ? <ProfileView /> : <SettingsView />}</div>}
-    <PWAStatus />
+    <NativeRuntime /><PWAStatus />
   </div>;
 }
