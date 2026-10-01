@@ -788,7 +788,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, [contentedita
 @media (max-width: 820px) {
   .home-layout { overflow-x: hidden; }
   .home-left { display: contents; }
-  .home-ai { width: 100%; flex: 0 0 100%; height: 100%; padding: 10px 8px 12px; }
+  .home-ai { width: 100%; flex: none; height: clamp(340px, 58svh, 500px); padding: 10px 8px 12px; }
   .home-ai-glow, .home-ai-content, .home-ai-content .ai-chat { width: 100%; min-width: 0; }
   .home-ai-glow { max-width: none; }
   .home-ai::after { top: auto; bottom: 0; }
@@ -951,6 +951,12 @@ html:has(.home-layout), body:has(.home-layout),
 
 .native-ios .app-frame { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
 .native-ios .modal-backdrop { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+@media (max-width: 820px) and (hover: none) and (pointer: coarse) {
+  .home-ai { flex: 0 0 100%; height: 100%; }
+}
+@media (max-width: 820px) {
+  .native-ios .home-ai { flex: 0 0 100%; height: 100%; }
+}
 
 /* Gym follows the workspace's paper surfaces, serif titles and quiet controls. */
 .gym-redesign { max-width: none; background: var(--surface); padding: 30px clamp(16px, 4vw, 60px) 42px; }
