@@ -664,6 +664,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, [contentedita
 .ai-chat-model-trigger { padding: 4px 2px; border: 0; border-radius: 5px; background: transparent; cursor: pointer; text-align: left; }
 .ai-chat-model-trigger:hover, .ai-chat-model-trigger[aria-expanded='true'] { color: var(--text); }
 .ai-chat-model-trigger svg { flex: none; align-self: center; color: var(--muted); }
+.home-chat-model-trigger { min-width: 0; display: flex; align-items: center; gap: 4px; font: inherit; color: var(--faint); }
 .ai-chat-toolbar-actions { flex: none; display: flex; gap: 4px; }
 .ai-chat-toolbar-actions button { width: 30px; height: 30px; padding: 0; display: grid; place-items: center; border: 1px solid transparent; border-radius: 50%; background: transparent; color: var(--muted); cursor: pointer; }
 .ai-chat-toolbar-actions button:hover, .ai-chat-toolbar-actions button[aria-expanded='true'] { border-color: var(--line); background: var(--panel-raised); color: var(--text); }
