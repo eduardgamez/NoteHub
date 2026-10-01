@@ -958,7 +958,7 @@ html:has(.home-layout), body:has(.home-layout),
 }
 @media (max-width: 820px) {
   .native-ios .home-ai { flex: 0 0 100%; height: 100%; }
-  .native-ios .home-ai .ai-composer-wrap { width: min(500px, calc(100% - 28px)); }
+  .native-ios .home-ai .ai-composer-wrap { width: min(500px, calc(100% - 20px)); }
 }
 
 /* Gym follows the workspace's paper surfaces, serif titles and quiet controls. */
