@@ -29,7 +29,8 @@ export function SettingsView() {
   const [email, setEmail] = useState('');
   const [emailProof, setEmailProof] = useState('');
   const [codeSent, setCodeSent] = useState(false);
-  const [passwordMode, setPasswordMode] = useState(false);
+  const [passwordMode, setPasswordMode] = useState(true);
+  const [syncBusy, setSyncBusy] = useState(false);
   const [syncPassword, setSyncPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [syncMessage, setSyncMessage] = useState('');
@@ -88,16 +89,18 @@ export function SettingsView() {
   }
   function togglePermission(key: keyof AIPermissions) { const next = { ...permissions, [key]: !permissions[key] }; setPermissions(next); saveAIPermissions(next); }
   async function connect(event: React.FormEvent) {
-    event.preventDefault(); setSyncMessage('');
+    event.preventDefault(); if (syncBusy) return; setSyncBusy(true); setSyncMessage('');
     try { await cloudSync.sendEmailCode(email); setCodeSent(true); setSyncMessage('Copy the link from the email and paste it below without opening it. If your email has a code, you can enter that instead.'); } catch (error) { setSyncMessage(error instanceof Error ? error.message : 'Could not send sign-in email.'); }
+    finally { setSyncBusy(false); }
   }
   async function verifyEmail(event: React.FormEvent) {
-    event.preventDefault(); setSyncMessage('');
+    event.preventDefault(); if (syncBusy) return; setSyncBusy(true); setSyncMessage('');
     try {
       if (/^https?:\/\//i.test(emailProof.trim())) await cloudSync.verifyEmailLink(emailProof);
       else await cloudSync.verifyEmailCode(email, emailProof.trim());
       window.location.reload();
     } catch (error) { setSyncMessage(error instanceof Error ? error.message : 'Could not verify email.'); }
+    finally { setSyncBusy(false); }
   }
   async function saveSyncPassword(event: React.FormEvent) {
     event.preventDefault(); setSyncMessage('');
@@ -109,9 +112,10 @@ export function SettingsView() {
     } catch (error) { setSyncMessage(error instanceof Error ? error.message : 'Could not save password.'); }
   }
   async function signInWithPassword(event: React.FormEvent) {
-    event.preventDefault(); setSyncMessage('');
+    event.preventDefault(); if (syncBusy) return; setSyncBusy(true); setSyncMessage('');
     try { await cloudSync.signInWithPassword(email, syncPassword); window.location.reload(); }
     catch (error) { setSyncMessage(error instanceof Error ? error.message : 'Could not sign in.'); }
+    finally { setSyncBusy(false); }
   }
 
   return <div className="module-view settings-view"><div className="module-header"><div><p className="eyebrow">WORKSPACE</p><h1>Settings</h1><p>Appearance, secure AI providers, and synchronization.</p></div></div>
@@ -139,10 +143,10 @@ export function SettingsView() {
         <button className="secondary-button" type="button" onClick={() => void signOut()}>Sign out</button>
         {syncMessage && <small>{syncMessage}</small>}
       </form> : syncStatus.configured ? <form onSubmit={passwordMode ? signInWithPassword : codeSent ? verifyEmail : connect}>
-        <input type="email" required value={email} onChange={(event) => { setEmail(event.target.value); setCodeSent(false); }} placeholder="you@example.com" aria-label="Sync email" />
+        <input type="email" autoComplete="username" autoCapitalize="none" spellCheck={false} required value={email} onChange={(event) => { setEmail(event.target.value); setCodeSent(false); }} placeholder="you@example.com" aria-label="Sync email" />
         {passwordMode ? <input type="password" autoComplete="current-password" required value={syncPassword} onChange={(event) => setSyncPassword(event.target.value)} placeholder="Password" aria-label="Sync password" /> : codeSent ? <input type="text" autoComplete="one-time-code" required value={emailProof} onChange={(event) => setEmailProof(event.target.value)} placeholder="Paste email link or code" aria-label="Email link or code" /> : null}
-        <button className="primary-button" type="submit">{passwordMode ? 'Sign in' : codeSent ? 'Verify email' : 'Send sign-in email'}</button>
-        <button className="secondary-button" type="button" onClick={() => { setPasswordMode(!passwordMode); setCodeSent(false); setSyncMessage(''); }}>{passwordMode ? 'Use email link' : 'Use password'}</button>
+        <button className="primary-button" type="submit" disabled={syncBusy}>{syncBusy ? 'Connecting…' : passwordMode ? 'Sign in' : codeSent ? 'Verify email' : 'Send sign-in email'}</button>
+        <button className="secondary-button" type="button" disabled={syncBusy} onClick={() => { setPasswordMode(!passwordMode); setCodeSent(false); setSyncMessage(''); }}>{passwordMode ? 'Use email link' : 'Use password'}</button>
         {syncMessage && <small>{syncMessage}</small>}
       </form> : <div className="status-chip"><Server size={14} /> Local only</div>}
     </section>

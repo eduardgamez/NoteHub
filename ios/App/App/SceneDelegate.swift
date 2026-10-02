@@ -1,5 +1,6 @@
 import UIKit
 import Capacitor
+import UserNotifications
 
 class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
@@ -11,6 +12,14 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         window?.rootViewController = NoteHubViewController()
         window?.makeKeyAndVisible()
 
+        if let response = connectionOptions.notificationResponse,
+           response.actionIdentifier == UNNotificationDefaultActionIdentifier,
+           let id = response.notification.request.content.userInfo["targetId"] as? String {
+            Task { @MainActor in
+                ReminderStore.navigationRequest = .init(targetId: id)
+                NotificationCenter.default.post(name: Notification.Name("NoteHubNotificationOpened"), object: nil)
+            }
+        }
         SceneDelegateProxy.shared.scene(scene, willConnectTo: session, options: connectionOptions)
     }
 

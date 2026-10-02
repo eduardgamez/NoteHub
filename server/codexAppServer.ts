@@ -215,7 +215,7 @@ export async function completeWithCodex(input: {
     const selected = choices.find((item: any) => item.model === input.model) ?? choices.find((item: any) => item.model === 'gpt-6-sol') ?? choices.find((item: any) => item.isDefault) ?? choices[0];
     if (!selected) throw new Error('No Codex model is available for this ChatGPT account.');
     const supportedEfforts = Array.isArray(selected.supportedReasoningEfforts) ? selected.supportedReasoningEfforts.map((item: any) => item.reasoningEffort) : [];
-    const effort = supportedEfforts.includes(input.effort) ? input.effort : selected.defaultReasoningEffort || supportedEfforts[0];
+    const effort = supportedEfforts.includes(input.effort) ? input.effort : selected.model === 'gpt-6-sol' && supportedEfforts.includes('low') ? 'low' : selected.defaultReasoningEffort || supportedEfforts[0];
     const started = await connection.request('thread/start', {
       model: selected.model, cwd: directory, approvalPolicy: 'never', sandbox: 'read-only',
       serviceName: 'notehub', ephemeral: true,

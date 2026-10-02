@@ -1,13 +1,71 @@
 import Capacitor
 import UserNotifications
 import ActivityKit
+import UIKit
+import Security
 
 @objc(NoteHubPlugin)
 public class NoteHubPlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "NoteHubPlugin"
     public let jsName = "NoteHubNative"
-    public let pluginMethods: [CAPPluginMethod] = ["permission", "sync", "pendingActions", "acknowledge", "showReminder"].map { CAPPluginMethod(name: $0, returnType: CAPPluginReturnPromise) }
+    public let pluginMethods: [CAPPluginMethod] = ["permission", "sync", "refreshActivity", "pendingActions", "acknowledge", "pendingNavigation", "acknowledgeNavigation", "authGet", "authSet", "authRemove"].map { CAPPluginMethod(name: $0, returnType: CAPPluginReturnPromise) }
 
+    private func authQuery(_ call: CAPPluginCall) -> [String: Any]? {
+        guard let key = call.getString("key"), key.hasPrefix("sb-"), key.contains("-auth-token") else {
+            call.reject("Invalid session storage key"); return nil
+        }
+        return [kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: "com.eduardgamez.notehub.auth",
+                kSecAttrAccount as String: key]
+    }
+    @objc func authGet(_ call: CAPPluginCall) {
+        guard var query = authQuery(call) else { return }
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound { call.resolve([:]); return }
+        guard status == errSecSuccess, let data = result as? Data, let value = String(data: data, encoding: .utf8) else {
+            call.reject("Could not read saved session (\(status))"); return
+        }
+        call.resolve(["value": value])
+    }
+    @objc func authSet(_ call: CAPPluginCall) {
+        guard var query = authQuery(call) else { return }
+        guard let value = call.getString("value"), let data = value.data(using: .utf8) else { call.reject("Invalid session"); return }
+        let attributes: [String: Any] = [kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly]
+        var status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        if status == errSecItemNotFound {
+            query.merge(attributes) { _, new in new }
+            status = SecItemAdd(query as CFDictionary, nil)
+        }
+        guard status == errSecSuccess else { call.reject("Could not save session (\(status))"); return }
+        call.resolve()
+    }
+    @objc func authRemove(_ call: CAPPluginCall) {
+        guard let query = authQuery(call) else { return }
+        let status = SecItemDelete(query as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else { call.reject("Could not remove session (\(status))"); return }
+        call.resolve()
+    }
+
+    private var navigationObserver: NSObjectProtocol?
+    public override func load() {
+        navigationObserver = NotificationCenter.default.addObserver(forName: Notification.Name("NoteHubNotificationOpened"), object: nil, queue: .main) { [weak self] _ in
+            self?.notifyListeners("notificationOpened", data: [:])
+        }
+    }
+    deinit { if let navigationObserver { NotificationCenter.default.removeObserver(navigationObserver) } }
+    @objc func pendingNavigation(_ call: CAPPluginCall) { Task { @MainActor in
+        if let request = ReminderStore.navigationRequest {
+            call.resolve(["navigation": ["id": request.id, "targetId": request.targetId]])
+        } else { call.resolve([:]) }
+    } }
+    @objc func acknowledgeNavigation(_ call: CAPPluginCall) { Task { @MainActor in
+        if ReminderStore.navigationRequest?.id == call.getString("id") { ReminderStore.navigationRequest = nil }
+        call.resolve()
+    } }
     @objc func permission(_ call: CAPPluginCall) {
         let center = UNUserNotificationCenter.current()
         if call.getBool("request") == true {
@@ -27,24 +85,20 @@ public class NoteHubPlugin: CAPPlugin, CAPBridgedPlugin {
                 else if let index = next.firstIndex(where: { $0.id == action.targetId }), let task = next[index].checklist.firstIndex(where: { $0.id == action.itemId }), let done = action.done { next[index].checklist[task].done = done }
             }
             ReminderStore.items = next
-            await ReminderStore.updateActivities()
+            await ReminderStore.syncActivities(allowCreation: UIApplication.shared.applicationState == .active)
             let center = UNUserNotificationCenter.current()
             center.getPendingNotificationRequests { pending in
                 center.removePendingNotificationRequests(withIdentifiers: pending.filter { $0.identifier.hasPrefix("task:") || $0.identifier.hasPrefix("event:") }.map(\.identifier))
                 let upcoming = next.filter { $0.due > Date().timeIntervalSince1970 }.sorted { $0.due < $1.due }.prefix(60)
-                let categories = next.map { item in
+                var categories = next.filter { $0.kind == "event" }.map { item in
                     var actions = item.checklist.filter { !$0.done }.prefix(3).map { UNNotificationAction(identifier: "check:\($0.id)", title: "✓ \($0.text)", options: []) }
                     actions.append(UNNotificationAction(identifier: "delete", title: "Borrar", options: .destructive))
                     return UNNotificationCategory(identifier: item.id, actions: actions, intentIdentifiers: [])
                 }
+                categories.append(UNNotificationCategory(identifier: "notehub-reminder", actions: [], intentIdentifiers: [], options: .customDismissAction))
                 center.setNotificationCategories(Set(categories))
                 for item in upcoming {
-                    let content = UNMutableNotificationContent()
-                    content.title = item.title
-                    content.body = item.checklist.filter { !$0.done }.prefix(3).map(\.text).joined(separator: " · ")
-                    if content.body.isEmpty { content.body = item.kind == "event" ? "Tu evento empieza ahora" : "Recordatorio de NoteHub" }
-                    content.sound = .default; content.categoryIdentifier = item.id
-                    content.userInfo = ["targetId": item.id]
+                    let content = ReminderStore.notificationContent(for: item)
                     let date = Date(timeIntervalSince1970: item.due)
                     let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
                     center.add(UNNotificationRequest(identifier: item.id, content: content, trigger: UNCalendarNotificationTrigger(dateMatching: components, repeats: false)))
@@ -53,6 +107,10 @@ public class NoteHubPlugin: CAPPlugin, CAPBridgedPlugin {
             }
         }
     }
+    @objc func refreshActivity(_ call: CAPPluginCall) { Task { @MainActor in
+        await ReminderStore.syncActivities(allowCreation: UIApplication.shared.applicationState == .active)
+        call.resolve()
+    } }
     @objc func pendingActions(_ call: CAPPluginCall) { Task { @MainActor in
         let data = try? JSONEncoder().encode(ReminderStore.actions)
         call.resolve(["actions": (data.flatMap { try? JSONSerialization.jsonObject(with: $0) }) ?? []])
@@ -62,15 +120,7 @@ public class NoteHubPlugin: CAPPlugin, CAPBridgedPlugin {
         ReminderStore.actions.removeAll { ids.contains($0.id) }
         call.resolve()
     } }
-    @objc func showReminder(_ call: CAPPluginCall) { Task { @MainActor in
-        guard ActivityAuthorizationInfo().areActivitiesEnabled else { call.reject("Activa Actividades en directo en los ajustes de NoteHub del iPhone."); return }
-        guard let id = call.getString("id"), let item = ReminderStore.items.first(where: { $0.id == id }) else { call.reject("Este recordatorio ya no existe."); return }
-        if Activity<ReminderAttributes>.activities.contains(where: { $0.attributes.id == id }) { call.resolve(); return }
-        do {
-            _ = try Activity<ReminderAttributes>.request(attributes: .init(id: id), content: ActivityContent(state: .init(title: item.title, checklist: Array(item.checklist.prefix(8))), staleDate: nil), pushType: nil)
-            call.resolve()
-        } catch { call.reject(error.localizedDescription) }
-    } }
+
 }
 class NoteHubViewController: CAPBridgeViewController {
     override func capacitorDidLoad() { bridge?.registerPluginInstance(NoteHubPlugin()) }

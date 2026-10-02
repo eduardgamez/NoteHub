@@ -1,16 +1,23 @@
-import { Capacitor, registerPlugin } from '@capacitor/core';
+import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor/core';
 import { isAllDayReminder, reminderDate } from '../lib/reminderTime';
 import type { CalendarEvent, ChecklistEntry, Task } from '../types';
 
 export const isNativeIOS = () => Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'ios';
-export interface NativeItem { id: string; title: string; kind: 'task' | 'event'; due: number; checklist: ChecklistEntry[] }
+export interface NativeItem { id: string; title: string; kind: 'task' | 'event'; due: number; end?: number; checklist: ChecklistEntry[] }
 export interface NativeAction { id: string; targetId: string; kind: 'delete' | 'check'; itemId?: string; done?: boolean }
+export interface NativeNavigation { id: string; targetId: string }
 interface NativeBridge {
+  authGet(options: { key: string }): Promise<{ value?: string }>;
+  authSet(options: { key: string; value: string }): Promise<void>;
+  authRemove(options: { key: string }): Promise<void>;
+  pendingNavigation(): Promise<{ navigation?: NativeNavigation } | undefined>;
+  acknowledgeNavigation(options: { id: string }): Promise<void>;
+  addListener(event: 'notificationOpened', listener: () => void): Promise<PluginListenerHandle>;
   permission(options: { request: boolean }): Promise<{ enabled: boolean }>;
   sync(options: { items: NativeItem[] }): Promise<{ scheduled: number }>;
+  refreshActivity(): Promise<void>;
   pendingActions(): Promise<{ actions: NativeAction[] }>;
   acknowledge(options: { ids: string[] }): Promise<void>;
-  showReminder(options: { id: string }): Promise<void>;
 }
 export const nativeBridge = registerPlugin<NativeBridge>('NoteHubNative');
 export function nativeItems(tasks: Task[], events: CalendarEvent[]): NativeItem[] {
@@ -20,7 +27,7 @@ export function nativeItems(tasks: Task[], events: CalendarEvent[]): NativeItem[
       if (isAllDayReminder(task)) date.setHours(9, 0, 0, 0);
       return { id: `task:${task.id}`, title: task.title, kind: 'task', due: date.getTime() / 1000, checklist: task.checklist };
     }),
-    ...events.map((event): NativeItem => ({ id: `event:${event.id}`, title: event.title, kind: 'event', due: new Date(event.start).getTime() / 1000, checklist: event.checklist ?? [] })),
+    ...events.map((event): NativeItem => ({ id: `event:${event.id}`, title: event.title, kind: 'event', due: new Date(event.start).getTime() / 1000, end: new Date(event.end).getTime() / 1000, checklist: event.checklist ?? [] })),
   ].filter((item) => Number.isFinite(item.due));
 }
 export function apiUrl(path: string): string {

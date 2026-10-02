@@ -3,11 +3,15 @@ import { get, set } from 'idb-keyval';
 import type { SyncOperation } from './syncEngine';
 import type { WorkspaceStateData } from '../types';
 import { isStarterWorkspace } from '../lib/starterWorkspace';
+import { isNativeIOS } from '../native/bridge';
+import { deviceAuthStorage } from './authDevice';
 
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const publishableKey = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? import.meta.env.VITE_SUPABASE_ANON_KEY) as string | undefined;
 const QUEUE_KEY = 'notehub-cloud-operation-queue-v1';
-let client: SupabaseClient | null = url && publishableKey ? createClient(url, publishableKey, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } }) : null;
+let client: SupabaseClient | null = url && publishableKey ? createClient(url, publishableKey, {
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, ...(isNativeIOS() ? { storage: deviceAuthStorage } : {}) },
+}) : null;
 let channel: RealtimeChannel | null = null;
 let receiver: ((operation: SyncOperation) => void) | null = null;
 let replayHistory: ((operations: SyncOperation[]) => void) | null = null;
@@ -106,12 +110,12 @@ export const cloudSync = {
   },
   async sendEmailCode(email: string) {
     if (!client) throw new Error('Supabase is not configured.');
-    const { error } = await client.auth.signInWithOtp({ email });
+    const { error } = await client.auth.signInWithOtp({ email: email.trim() });
     if (error) throw error;
   },
   async verifyEmailCode(email: string, token: string) {
     if (!client) throw new Error('Supabase is not configured.');
-    const { error } = await client.auth.verifyOtp({ email, token, type: 'email' });
+    const { error } = await client.auth.verifyOtp({ email: email.trim(), token: token.trim(), type: 'email' });
     if (error) throw error;
   },
   async verifyEmailLink(link: string) {
@@ -133,7 +137,7 @@ export const cloudSync = {
   },
   async signInWithPassword(email: string, password: string) {
     if (!client) throw new Error('Supabase is not configured.');
-    const { error } = await client.auth.signInWithPassword({ email, password });
+    const { error } = await client.auth.signInWithPassword({ email: email.trim(), password });
     if (error) throw error;
   },
   async signOut() {

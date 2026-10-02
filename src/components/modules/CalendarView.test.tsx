@@ -1,5 +1,6 @@
+import { openNotification, useNotificationNavigation } from '../../native/navigation';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { seedWorkspace } from '../../data/seed';
 import { useWorkspace } from '../../store/useWorkspace';
 import { syncEngine } from '../../sync/syncEngine';
@@ -10,6 +11,7 @@ vi.mock('../../sync/syncEngine', () => ({ syncEngine: { publish: vi.fn(), subscr
 
 beforeEach(() => {
   cleanup(); vi.clearAllMocks();
+  useNotificationNavigation.setState({ request: null });
   const start = new Date(); start.setHours(10, 0, 0, 0);
   useWorkspace.setState({ ...structuredClone(seedWorkspace), calendarEvents: [{ id: 'event-test', title: 'Study session', start: start.toISOString(), end: new Date(start.getTime() + 3600000).toISOString(), color: 'green' }] });
 });
@@ -190,4 +192,26 @@ it('marks only elapsed events and reminders as done in week and month views', ()
   }
   fireEvent.click(screen.getByRole('button', { name: 'Event: Pasado' }));
   expect(within(screen.getByRole('dialog', { name: 'Manage event' })).getByText('Done')).toBeInTheDocument();
+});
+
+it('opens a notification reminder on home after starting from another screen, including an older date', async () => {
+  useWorkspace.setState({ activeView: 'note', tasks: [{ id: 'notified', title: 'Aviso recibido', due: '2026-09-10T08:00:00+02:00', reminder: true, done: false, checklist: [] }] });
+  openNotification({ id: 'tap-cold-start', targetId: 'task:notified' });
+  expect(useWorkspace.getState().activeView).toBe('calendar');
+  render(<CalendarView />);
+  await waitFor(() => expect(screen.getByRole('dialog', { name: 'Manage reminder' })).toBeInTheDocument());
+  expect(screen.getByLabelText('Título del recordatorio')).toHaveValue('Aviso recibido');
+  expect(screen.getByLabelText('Día del recordatorio')).toHaveValue('2026-09-10');
+  fireEvent.click(screen.getByRole('button', { name: 'Close reminder' }));
+  act(() => openNotification({ id: 'second-tap', targetId: 'task:notified' }));
+  await waitFor(() => expect(screen.getByRole('dialog', { name: 'Manage reminder' })).toBeInTheDocument());
+});
+
+it('returns to home safely when the notification refers to a deleted reminder', async () => {
+  useWorkspace.setState({ activeView: 'settings', tasks: [] });
+  openNotification({ id: 'deleted-tap', targetId: 'task:deleted' });
+  render(<CalendarView />);
+  await waitFor(() => expect(useNotificationNavigation.getState().request).toBeNull());
+  expect(useWorkspace.getState().activeView).toBe('calendar');
+  expect(screen.queryByRole('dialog', { name: 'Manage reminder' })).toBeNull();
 });

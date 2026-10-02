@@ -14,10 +14,12 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
  const request = JSON.parse(line);
  if (!request.id) return;
  let result = {};
- if (request.method === 'model/list') result = { data: [{ model: 'gpt-6-sol', displayName: 'Codex test', isDefault: true, defaultReasoningEffort: 'low', supportedReasoningEfforts: [] }] };
+ if (request.method === 'model/list') result = { data: [{ model: 'gpt-6-sol', displayName: 'Codex test', isDefault: true, defaultReasoningEffort: 'high', supportedReasoningEfforts: [{ reasoningEffort: 'low' }, { reasoningEffort: 'high' }] }] };
  if (request.method === 'thread/start') result = { thread: { id: 'test-thread' } };
  send({ id: request.id, result });
  if (request.method === 'turn/start') {
+  require('node:assert/strict').equal(request.params.model, 'gpt-6-sol');
+  require('node:assert/strict').equal(request.params.effort, 'low');
   const quiet = request.params.input[0].text.includes('quiet-test');
   const activity = quiet ? undefined : setInterval(() => send({ method: 'item/reasoning/textDelta', params: { delta: 'test activity' } }), 400);
   if (!quiet) setTimeout(() => send({ method: 'item/completed', params: { item: { type: 'agentMessage', phase: 'commentary', text: 'Estoy comprobando la información disponible.' } } }), 100);
@@ -32,7 +34,7 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
 `, { mode: 0o755 });
 const broker = spawn(resolve('node_modules/.bin/tsx'), ['server/index.ts'], { env: { ...process.env, NOTEHUB_API_PORT: '8789', NOTEHUB_CODEX_IDLE_TIMEOUT_MS: '1500', NOTEHUB_REQUIRE_AUTH: 'false', NOTEHUB_WEB_ORIGIN: 'http://127.0.0.1:5189', NOTEHUB_CODEX_BIN: binary }, stdio: ['ignore', 'ignore', 'pipe'] });
 broker.stderr.on('data', (data) => process.stderr.write(data));
-const web = spawn('npm', ['run', 'dev:web', '--', '--host', '127.0.0.1', '--port', '5189', '--strictPort'], { stdio: 'ignore' });
+const web = spawn('npm', ['run', 'dev:web', '--', '--host', '127.0.0.1', '--port', '5189', '--strictPort'], { env: { ...process.env, VITE_API_ORIGIN: 'http://127.0.0.1:8789' }, stdio: 'ignore' });
 let browser;
 try {
  for (let attempt = 0; ; attempt++) {
@@ -51,8 +53,13 @@ try {
   try { await page.goto('http://127.0.0.1:5189'); break; } catch (error) { if (attempt >= 25) throw error; await new Promise((resolve) => setTimeout(resolve, 200)); }
  }
  await page.locator('.project-tile').first().waitFor();
+ await page.getByText('Using Codex test · Low', { exact: true }).waitFor();
+ const completionRequest = page.waitForRequest((request) => request.url().endsWith('/api/ai/complete') && request.method() === 'POST');
  await page.locator('.home-ai textarea').fill('Revisa mis datos');
  await page.getByRole('button', { name: 'Send', exact: true }).click();
+ const payload = (await completionRequest).postDataJSON();
+ assert.equal(payload.model, 'gpt-6-sol');
+ assert.equal(payload.effort, 'low');
  await page.getByText('Estoy comprobando la información disponible.', { exact: true }).waitFor({ timeout: 10000 }).catch(async (error) => { console.log('Chat error:', await page.locator('.ai-error').textContent().catch(() => 'none')); throw error; });
  await page.getByText('Ahora estoy contrastando los datos.', { exact: true }).waitFor();
  assert.equal(await page.locator('.chat-progress p').count(), 1);

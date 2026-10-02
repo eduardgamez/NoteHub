@@ -1,4 +1,4 @@
-import { isNativeIOS, nativeBridge, nativeItems } from '../../native/bridge';
+import { useNotificationNavigation } from '../../native/navigation';
 import { EditableTaskList } from './EditableTaskList';
 import { eventDone, isAllDayReminder, reminderDate, reminderDone } from '../../lib/reminderTime';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -27,6 +27,7 @@ function sameDay(a: Date, b: Date) { return a.toDateString() === b.toDateString(
 function localInputValue(date: Date) { return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16); }
 
 export function CalendarView() {
+  const notificationRequest = useNotificationNavigation((state) => state.request);
   const events = useWorkspace((state) => state.calendarEvents);
   const tasks = useWorkspace((state) => state.tasks);
   const updateEvent = useWorkspace((state) => state.updateEvent);
@@ -47,7 +48,6 @@ export function CalendarView() {
   const [hoveredReminder, setHoveredReminder] = useState<{ title: string; x: number; y: number; side: 'left' | 'right' } | null>(null);
   const taskPopoverRef = useRef<HTMLFormElement>(null);
   const [reminderDraft, setReminderDraft] = useState({ title: '', date: '', time: '09:00', allDay: false, checklist: [] as ChecklistEntry[] });
-  const [nativeMessage, setNativeMessage] = useState('');
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const refresh = () => setNow(new Date());
@@ -113,6 +113,33 @@ export function CalendarView() {
     setEventDraft({ title: event.title, start: localInputValue(new Date(event.start)), end: localInputValue(new Date(event.end)), checklist: structuredClone(event.checklist ?? []) });
     setSelectedEvent(popoverPosition(event.id, element, Math.min(360, window.innerWidth - 24)));
   }
+
+  useEffect(() => {
+    if (!notificationRequest) return;
+    let cancelled = false;
+    // The request survives navigating from another screen or starting the app cold.
+    queueMicrotask(() => {
+      if (cancelled || useNotificationNavigation.getState().request?.id !== notificationRequest.id) return;
+      const targetId = notificationRequest.targetId;
+      const task = targetId.startsWith('task:') ? tasks.find((item) => item.id === targetId.slice(5)) : undefined;
+      const calendarEvent = targetId.startsWith('event:') ? events.find((item) => item.id === targetId.slice(6)) : undefined;
+      const position = { id: task?.id ?? calendarEvent?.id ?? '', x: Math.max(12, (window.innerWidth - 360) / 2), y: Math.max(12, window.innerHeight * .2), anchorTop: 0, maxHeight: window.innerHeight * .82 };
+      setCreating(false); setHoveredReminder(null);
+      if (task) {
+        const date = task.due ? reminderDate(task.due) : new Date();
+        const due = localInputValue(date);
+        setCursor(date); setMode('day'); setSelectedEvent(null);
+        setReminderDraft({ title: task.title, date: due.slice(0, 10), time: isAllDayReminder(task) ? '09:00' : due.slice(11, 16) || '09:00', allDay: isAllDayReminder(task), checklist: structuredClone(task.checklist) });
+        setSelectedTask(position);
+      } else if (calendarEvent) {
+        setCursor(new Date(calendarEvent.start)); setMode('day'); setSelectedTask(null);
+        setEventDraft({ title: calendarEvent.title, start: localInputValue(new Date(calendarEvent.start)), end: localInputValue(new Date(calendarEvent.end)), checklist: structuredClone(calendarEvent.checklist ?? []) });
+        setSelectedEvent(position);
+      } else { setSelectedTask(null); setSelectedEvent(null); }
+      useNotificationNavigation.setState({ request: null });
+    });
+    return () => { cancelled = true; };
+  }, [notificationRequest, tasks, events]);
 
   function saveEvent(event: React.FormEvent) {
     event.preventDefault();
@@ -203,8 +230,6 @@ export function CalendarView() {
       <div className="reminder-title-line"><strong>{activeTask.reminder ? 'Recordatorio' : 'Tarea'} ·</strong><textarea aria-label="Título del recordatorio" value={reminderDraft.title} onChange={(event) => setReminderDraft({ ...reminderDraft, title: event.target.value })} rows={1} ref={(element) => { if (element) { element.style.height = 'auto'; element.style.height = `${element.scrollHeight}px`; } }} required /><button type="button" className="reminder-close" aria-label="Close reminder" onClick={() => setSelectedTask(null)}><X size={14} /></button></div>
       <div className="reminder-moment"><span>Momento</span><input aria-label="Día del recordatorio" type="date" value={reminderDraft.date} onChange={(event) => setReminderDraft({ ...reminderDraft, date: event.target.value })} /><div className={`reminder-time-field ${reminderDraft.allDay ? 'without-time' : ''}`}><input aria-label="Hora del recordatorio" className={reminderDraft.allDay ? 'without-time' : ''} type={reminderDraft.allDay ? 'text' : 'time'} value={reminderDraft.time} disabled={reminderDraft.allDay} onChange={(event) => setReminderDraft({ ...reminderDraft, time: event.target.value })} /></div><button type="button" className={`reminder-time-toggle ${reminderDraft.allDay ? 'off' : ''}`} aria-label={reminderDraft.allDay ? 'Activar hora' : 'Quitar hora'} aria-pressed={reminderDraft.allDay} title={reminderDraft.allDay ? 'Recordatorio de todo el día. Activar hora' : 'Convertir en recordatorio de todo el día'} onClick={() => setReminderDraft({ ...reminderDraft, allDay: !reminderDraft.allDay })}><X size={15} /></button></div>
       <EditableTaskList items={reminderDraft.checklist} onChange={(checklist) => setReminderDraft({ ...reminderDraft, checklist })} />
-      {isNativeIOS() && <button type="button" className="reminder-add-task" onClick={async () => { try { await nativeBridge.sync({ items: nativeItems(tasks, events) }); await nativeBridge.showReminder({ id: `task:${activeTask.id}` }); setNativeMessage('Recordatorio mostrado en la pantalla bloqueada. Guarda primero tus cambios para actualizarlo.'); } catch (error) { setNativeMessage(error instanceof Error ? error.message : String(error)); } }}>Mostrar en pantalla bloqueada</button>}
-      {nativeMessage && isNativeIOS() && <small role="status">{nativeMessage}</small>}
       <div className="reminder-editor-footer"><span className="reminder-auto-status">{reminderDone(activeTask, now) ? 'Done' : ''}</span><button type="button" className="reminder-delete" aria-label="Delete reminder" onClick={() => { removeTask(activeTask.id); setSelectedTask(null); }}><Trash2 size={16} /></button><button type="submit" className="reminder-save">Save</button></div>
     </form>}
 

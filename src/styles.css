@@ -1103,3 +1103,22 @@ html:has(.home-layout), body:has(.home-layout),
   }
   .native-ios .project-title-input { font-size: 16px; }
 }
+
+/* Reserve room for the time toggle even with iPhone's 16px form controls. */
+.native-ios .reminder-moment {
+  display: grid;
+  grid-template-columns: auto minmax(0, 112px) minmax(0, 64px) 20px;
+  justify-content: start;
+}
+.native-ios .reminder-moment input[type='date'],
+.native-ios .reminder-moment input[type='time'] { width: 100%; min-width: 0; box-sizing: border-box; max-width: 100%; overflow: hidden; }
+.native-ios .reminder-time-field { width: 100%; min-width: 0; }
+.native-ios .reminder-moment input::-webkit-calendar-picker-indicator { display: none; }
+.native-ios .reminder-moment input::-webkit-date-and-time-value { min-width: 0; text-align: left; }
+.native-ios .reminder-moment input::-webkit-datetime-edit { min-width: 0; max-width: 100%; padding: 0; }
+@media (max-width: 360px) {
+  .native-ios .reminder-moment { grid-template-columns: auto minmax(0, 100px) minmax(0, 64px) 20px; gap: 5px; }
+}
+@media (max-width: 700px) {
+  .native-ios .reminder-title-line strong { font-size: 16px; }
+}

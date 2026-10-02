@@ -1,3 +1,4 @@
+import { openNotification } from './navigation';
 import { applyNativeAction } from './actions';
 import { useEffect } from 'react';
 import { useWorkspace, workspaceDataFrom } from '../store/useWorkspace';
@@ -24,11 +25,16 @@ export function NativeRuntime() {
             await saveWorkspace(workspaceDataFrom(useWorkspace.getState()));
             await nativeBridge.acknowledge({ ids: actions.map((action) => action.id) });
           }
+          const navigation = (await nativeBridge.pendingNavigation())?.navigation;
+          if (navigation) {
+            openNotification(navigation);
+            await nativeBridge.acknowledgeNavigation({ id: navigation.id });
+          }
           const state = useWorkspace.getState();
           if (!lastSynced || state.tasks !== lastSynced.tasks || state.calendarEvents !== lastSynced.calendarEvents || Date.now() - syncedAt > 15 * 60000) {
             await nativeBridge.sync({ items: nativeItems(state.tasks, state.calendarEvents) });
             lastSynced = state; syncedAt = Date.now();
-          }
+          } else { await nativeBridge.refreshActivity(); }
         } while (again && !stopped);
       } catch (error) { console.warn('NoteHub native reminders:', error); }
       finally { running = false; }
@@ -38,9 +44,10 @@ export function NativeRuntime() {
     const unsubscribe = useWorkspace.subscribe((state, previous) => { if (state.tasks !== previous.tasks || state.calendarEvents !== previous.calendarEvents) void refresh(); });
     document.addEventListener('visibilitychange', foreground);
     window.addEventListener('focus', foreground);
+    const navigationListener = nativeBridge.addListener('notificationOpened', () => { void refresh(); });
     const timer = window.setInterval(visible, 5000);
     void refresh();
-    return () => { stopped = true; unsubscribe(); clearInterval(timer); document.removeEventListener('visibilitychange', foreground); window.removeEventListener('focus', foreground); };
+    return () => { stopped = true; void navigationListener.then((listener) => listener.remove()).catch(() => {}); unsubscribe(); clearInterval(timer); document.removeEventListener('visibilitychange', foreground); window.removeEventListener('focus', foreground); };
   }, [hydrated]);
   return null;
 }
