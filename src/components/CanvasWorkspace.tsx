@@ -9,7 +9,7 @@ import { blockRows, findBlockDrop } from '../lib/blockLayout';
 import { BlockCard } from './BlockCard';
 import { CanvasToolbar } from './CanvasToolbar';
 import { InkLayer } from './InkLayer';
-import { DOCUMENT_WIDTH, documentPoint, fitDocumentScale, projectStroke, readDocumentLayout, strokeIntersectsRect, type DocumentLayout, type DocumentRect } from '../lib/documentInk';
+import { documentPageWidth, documentPoint, documentRowWidth, fitDocumentScale, projectStroke, readDocumentLayout, strokeIntersectsRect, type DocumentLayout, type DocumentRect } from '../lib/documentInk';
 
 function selectionRect(start: Point, end: Point): DocumentRect {
   return { x: Math.min(start.x, end.x), y: Math.min(start.y, end.y), width: Math.abs(end.x - start.x), height: Math.abs(end.y - start.y) };
@@ -31,13 +31,13 @@ export function CanvasWorkspace() {
   const [layout, setLayout] = useState<DocumentLayout>({});
   const [availableWidth, setAvailableWidth] = useState(0);
   const [pageHeight, setPageHeight] = useState(0);
-  const [contentWidth, setContentWidth] = useState(0);
   const [crossTextPosition, setCrossTextPosition] = useState<{ left: number; top: number } | null>(null);
   const note = useWorkspace((state) => state.notes[state.activeNoteId]);
   const rows = blockRows(note.blocks);
   const maxColumns = Math.max(1, ...rows.map((row) => row.columns.length));
-  const documentZoom = fitDocumentScale(availableWidth, maxColumns);
-  const documentFitted = documentZoom * DOCUMENT_WIDTH <= availableWidth + 1;
+  const pageWidth = documentPageWidth(maxColumns);
+  const documentZoom = fitDocumentScale(availableWidth);
+  const documentFitted = documentZoom * pageWidth <= availableWidth + 1;
   const selectedIds = useWorkspace((state) => state.selectedIds);
   const activeBlockId = useWorkspace((state) => state.activeBlockId);
   const setActiveBlockId = useWorkspace((state) => state.setActiveBlockId);
@@ -111,8 +111,6 @@ export function CanvasWorkspace() {
         const available = viewport.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
         setAvailableWidth((previous) => previous === available ? previous : available);
       }
-      const width = page.querySelector<HTMLElement>('.document-blocks')?.clientWidth ?? 0;
-      setContentWidth((previous) => previous === width ? previous : width);
     };
     const observer = new ResizeObserver(measure);
     observer.observe(page);
@@ -214,7 +212,7 @@ export function CanvasWorkspace() {
     if (!cancel && drag?.blockId === blockId && drag.targetId) reorderBlock(note.id, blockId, drag.targetId, Boolean(drag.before), Boolean(drag.side));
   }, [note.id, reorderBlock, moveReorder]);
 
-  const columnMinWidth = (blocks: CanvasBlock[]) => Math.min(contentWidth || 734, Math.max(160, ...blocks.filter((block) => block.type === 'table').map((block) => (block.tableColumnWidths?.reduce((sum, width) => sum + width, 4) ?? (block.tableColumnCount ?? (() => { try { return JSON.parse(block.content)[0]?.length ?? 0; } catch { return 0; } })()) * 90 + 4) + 25)));
+  const columnMinWidth = (blocks: CanvasBlock[], rowWidth: number) => Math.min(rowWidth, Math.max(160, ...blocks.filter((block) => block.type === 'table').map((block) => (block.tableColumnWidths?.reduce((sum, width) => sum + width, 4) ?? (block.tableColumnCount ?? (() => { try { return JSON.parse(block.content)[0]?.length ?? 0; } catch { return 0; } })()) * 90 + 4) + 25)));
   const selectedStrokes = note.strokes.filter((stroke) => selectedStrokeIds.includes(stroke.id)).map((stroke) => projectStroke(stroke, note.blocks, layout)).filter((stroke) => stroke !== null);
   const strokeBox = selectedStrokes.length ? selectedStrokes.reduce<DocumentRect>((box, stroke) => {
     const right = Math.max(box.x + box.width, stroke.bounds.x + stroke.bounds.width);
@@ -275,22 +273,23 @@ export function CanvasWorkspace() {
       setMarquee(null);
       if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     }}>
-      <div className="document-page-frame" style={{ width: DOCUMENT_WIDTH * documentZoom, height: pageHeight ? pageHeight * documentZoom : undefined }}>
-      <article ref={pageRef} className="document-page" style={{ transform: `scale(${documentZoom})` }}>
+      <div className="document-page-frame" style={{ width: pageWidth * documentZoom, height: pageHeight ? pageHeight * documentZoom : undefined }}>
+      <article ref={pageRef} className="document-page" style={{ width: pageWidth, minWidth: pageWidth, maxWidth: pageWidth, transform: `scale(${documentZoom})` }}>
         <div className="document-blocks">
           {rows.map((row) => {
-            const shouldWrap = contentWidth > 0 && row.columns.reduce((width, column) => width + columnMinWidth(column.blocks), 14 * (row.columns.length - 1)) > contentWidth;
-            const wideTable = row.columns.some((column) => column.blocks.some((block) => block.type === 'table') && columnMinWidth(column.blocks) > contentWidth / 2);
+            const rowWidth = documentRowWidth(row.columns.length);
+            const shouldWrap = row.columns.reduce((width, column) => width + columnMinWidth(column.blocks, rowWidth), 14 * (row.columns.length - 1)) > rowWidth;
+            const wideTable = row.columns.some((column) => column.blocks.some((block) => block.type === 'table') && columnMinWidth(column.blocks, rowWidth) > rowWidth / 2);
             const columns = shouldWrap && wideTable ? [...row.columns].sort((a, b) => Number(b.blocks.some((block) => block.type === 'table')) - Number(a.blocks.some((block) => block.type === 'table'))) : row.columns;
-            return <div className="document-block-row" data-row-id={row.id} key={row.id}>
-            {columns.map((column) => <div className={`document-block-column ${column.blocks.some((block) => block.type === 'table') ? 'has-table' : ''}`} key={column.id} style={{ minWidth: columnMinWidth(column.blocks) }}>
+            return <div className="document-block-row" data-row-id={row.id} key={row.id} style={{ width: rowWidth }}>
+            {columns.map((column) => <div className={`document-block-column ${column.blocks.some((block) => block.type === 'table') ? 'has-table' : ''}`} key={column.id} style={{ minWidth: columnMinWidth(column.blocks, rowWidth) }}>
               {column.blocks.map((block) => <BlockCard key={block.id} block={block} zoom={documentZoom} selected={selectedIds.includes(block.id)} active={activeBlockId === block.id} onAskAI={askAI} onReorderStart={startReorder} onReorderMove={moveReorder} onReorderEnd={endReorder} reorderClass={`${dropTarget?.blockId === block.id ? 'is-reordering' : ''} ${dropTarget?.targetId === block.id ? dropTarget.side ? dropTarget.before ? 'drop-left' : 'drop-right' : dropTarget.before ? 'drop-before' : 'drop-after' : ''}`} />)}
             </div>)}
           </div>; })}
         </div>
         <InkLayer noteId={note.id} mode={tool} toWorld={toPage} layout={layout} moving={inkMove} />
         {marquee && <div className="ink-selection-marquee" style={{ left: marquee.x, top: marquee.y, width: marquee.width, height: marquee.height }} />}
-        {strokeBox && <div className={`ink-selection-box ${strokeBox.x + strokeBox.width + 34 > DOCUMENT_WIDTH ? 'handle-left' : ''}`} role="group" aria-label="Selected drawing" style={{ left: strokeBox.x + (inkMove?.dx ?? 0), top: strokeBox.y + (inkMove?.dy ?? 0), width: strokeBox.width, height: strokeBox.height }}>
+        {strokeBox && <div className={`ink-selection-box ${strokeBox.x + strokeBox.width + 34 > pageWidth ? 'handle-left' : ''}`} role="group" aria-label="Selected drawing" style={{ left: strokeBox.x + (inkMove?.dx ?? 0), top: strokeBox.y + (inkMove?.dy ?? 0), width: strokeBox.width, height: strokeBox.height }}>
           <button type="button" className="ink-move-handle" aria-label="Move selected drawing" title="Move drawing" onPointerDown={(event) => {
             event.preventDefault();
             event.stopPropagation();
