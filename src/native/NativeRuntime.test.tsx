@@ -33,16 +33,8 @@ it('syncs the ongoing event even when iOS returns no pending notification naviga
   expect(nativeBridge.acknowledgeNavigation).not.toHaveBeenCalled();
 });
 
-it('asks for notification permission before scheduling upcoming items', async () => {
-  const now = Date.now();
-  useWorkspace.setState({ calendarEvents: [{ id: 'next', title: 'Luego', start: new Date(now + 3600000).toISOString(), end: new Date(now + 7200000).toISOString(), color: 'green' }] });
+it('asks for notification permission as soon as the app opens', async () => {
+  useWorkspace.setState({ calendarEvents: [] });
   render(<NativeRuntime />);
-  await waitFor(() => expect(nativeBridge.sync).toHaveBeenCalled());
-  expect(nativeBridge.permission).toHaveBeenCalledWith({ request: true });
-});
-
-it('does not prompt for permission when nothing is upcoming', async () => {
-  render(<NativeRuntime />);
-  await waitFor(() => expect(nativeBridge.sync).toHaveBeenCalled());
-  expect(nativeBridge.permission).not.toHaveBeenCalled();
+  await waitFor(() => expect(nativeBridge.permission).toHaveBeenCalledWith({ request: true }));
 });
