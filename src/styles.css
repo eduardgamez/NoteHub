@@ -1107,20 +1107,21 @@ html:has(.home-layout), body:has(.home-layout),
 /* Reserve room for the time toggle even with iPhone's 16px form controls. */
 .native-ios .reminder-moment {
   display: grid;
-  grid-template-columns: auto minmax(0, 132px) minmax(0, 76px) 22px;
+  grid-template-columns: auto minmax(0, 108px) minmax(0, 62px) 22px;
   gap: 6px;
+  align-items: center;
   justify-content: start;
 }
 /* iOS gives native date/time inputs an intrinsic width that ignores the grid track, so they spilled over each other. */
 .native-ios .reminder-moment input[type='date'],
-.native-ios .reminder-moment input[type='time'] { -webkit-appearance: none; appearance: none; display: block; width: 100%; min-width: 0; box-sizing: border-box; max-width: 100%; overflow: hidden; }
+.native-ios .reminder-moment input[type='time'] { -webkit-appearance: none; appearance: none; display: block; width: 100%; min-width: 0; box-sizing: border-box; max-width: 100%; overflow: hidden; height: 32px; line-height: 30px; padding: 0 8px; }
 .native-ios .reminder-moment .reminder-time-toggle { width: 22px; height: 22px; }
 .native-ios .reminder-time-field { width: 100%; min-width: 0; }
 .native-ios .reminder-moment input::-webkit-calendar-picker-indicator { display: none; }
-.native-ios .reminder-moment input::-webkit-date-and-time-value { min-width: 0; text-align: left; }
+.native-ios .reminder-moment input::-webkit-date-and-time-value { min-width: 0; margin: 0; line-height: 30px; text-align: left; }
 .native-ios .reminder-moment input::-webkit-datetime-edit { min-width: 0; max-width: 100%; padding: 0; }
 @media (max-width: 360px) {
-  .native-ios .reminder-moment { grid-template-columns: auto minmax(0, 116px) minmax(0, 68px) 22px; gap: 5px; }
+  .native-ios .reminder-moment { grid-template-columns: auto minmax(0, 102px) minmax(0, 58px) 22px; gap: 5px; }
 }
 @media (max-width: 700px) {
   .native-ios .reminder-title-line strong { font-size: 16px; }
