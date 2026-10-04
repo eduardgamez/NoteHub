@@ -32,7 +32,7 @@ final class ReminderTests: XCTestCase {
     @MainActor func seed() {
         ReminderStore.actions = []
         ReminderStore.dismissed = [:]
-        ReminderStore.presentation = nil
+        ReminderStore.presentations = [:]
         ReminderStore.enabledAt = 0
         ReminderStore.items = [ReminderItem(id: "task:qa", title: "Prueba", kind: "task", due: Date().timeIntervalSince1970 - 60,
             checklist: [ReminderTask(id: "one", text: "Primera", done: false), ReminderTask(id: "two", text: "Segunda", done: false)])]
@@ -111,33 +111,46 @@ final class ReminderTests: XCTestCase {
         XCTAssertTrue(ReminderStore.items[0].checklist[0].done)
         XCTAssertEqual(ReminderStore.actions.count, 1)
     }
-    @MainActor func testReminderOverridesEventAndDismissalRestoresIt() async throws {
+    @MainActor func testReminderShowsOverEventAndDismissalLeavesEvent() async throws {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { throw XCTSkip("Live Activities disabled by simulator settings") }
         seed()
         let now = Date().timeIntervalSince1970
         ReminderStore.items.append(ReminderItem(id: "event:qa", title: "Clase", kind: "event", due: now - 300, checklist: [], end: now + 3600))
         await ReminderStore.syncActivities()
-        let first = try XCTUnwrap(Activity<ReminderAttributes>.activities.first { $0.attributes.id == "notehub-agenda" })
-        XCTAssertEqual(Activity<ReminderAttributes>.activities.count, 1)
-        XCTAssertEqual(first.content.state.targetId, "task:qa")
-        await ReminderStore.syncActivities()
-        XCTAssertEqual(Activity<ReminderAttributes>.activities.first?.id, first.id)
-        let restored = expectation(description: "Event replaces the dismissed reminder")
-        let observer = Task { @MainActor in
-            for await value in first.contentUpdates {
-                if value.state.targetId == "event:qa" { restored.fulfill(); break }
-            }
+        func slot(_ id: String) -> Activity<ReminderAttributes>? {
+            Activity<ReminderAttributes>.activities.first { $0.attributes.id == id && $0.activityState == .active }
         }
+        let reminder = try XCTUnwrap(slot("notehub-reminder"))
+        let event = try XCTUnwrap(slot("notehub-event"))
+        XCTAssertEqual(reminder.content.state.targetId, "task:qa")
+        XCTAssertEqual(event.content.state.targetId, "event:qa")
+        XCTAssertGreaterThan(reminder.content.relevanceScore, event.content.relevanceScore)
+        await ReminderStore.syncActivities()
+        XCTAssertEqual(slot("notehub-reminder")?.id, reminder.id)
+        XCTAssertEqual(slot("notehub-event")?.id, event.id)
         _ = try await DismissReminderIntent(reminderId: "task:qa", due: ReminderStore.items[0].due).perform()
-        await fulfillment(of: [restored], timeout: 3)
-        observer.cancel()
-        XCTAssertEqual(Activity<ReminderAttributes>.activities.first?.content.state.targetId, "event:qa")
+        XCTAssertNil(slot("notehub-reminder"))
+        XCTAssertEqual(slot("notehub-event")?.id, event.id)
         XCTAssertEqual(ReminderStore.items.count, 2)
         XCTAssertTrue(ReminderStore.actions.isEmpty)
-        await ReminderStore.syncActivities()
-        XCTAssertEqual(Activity<ReminderAttributes>.activities.first?.content.state.targetId, "event:qa")
         await ReminderStore.syncActivities(now: now + 3601)
-        XCTAssertTrue(Activity<ReminderAttributes>.activities.isEmpty)
+        XCTAssertNil(slot("notehub-event"))
+        clean()
+        await ReminderStore.updateActivities()
+    }
+    @MainActor func testReminderDuringOngoingEventIsScheduledAheadOfTime() async throws {
+        guard #available(iOS 26.0, *) else { throw XCTSkip("Scheduling requires iOS 26") }
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else { throw XCTSkip("Live Activities disabled") }
+        seed()
+        let now = Date().timeIntervalSince1970
+        ReminderStore.items[0].due = now + 600
+        ReminderStore.items.append(ReminderItem(id: "event:qa", title: "Clase", kind: "event", due: now - 300, checklist: [], end: now + 3600))
+        await ReminderStore.syncActivities()
+        let event = try XCTUnwrap(Activity<ReminderAttributes>.activities.first { $0.attributes.id == "notehub-event" })
+        let reminder = try XCTUnwrap(Activity<ReminderAttributes>.activities.first { $0.attributes.id == "notehub-reminder" })
+        XCTAssertEqual(event.activityState, .active)
+        XCTAssertEqual(reminder.activityState, .pending)
+        XCTAssertEqual(reminder.content.state.targetId, "task:qa")
         clean()
         await ReminderStore.updateActivities()
     }
@@ -159,9 +172,9 @@ final class ReminderTests: XCTestCase {
         seed()
         let now = Date().timeIntervalSince1970
         ReminderStore.items = [ReminderItem(id: "event:ongoing", title: "Clase actual", kind: "event", due: now - 300, checklist: [], end: now + 3600)]
-        ReminderStore.presentation = .init(targetId: "event:ongoing", due: now - 300, activityId: "lost-after-update")
+        ReminderStore.presentations = ["notehub-event": .init(targetId: "event:ongoing", due: now - 300, activityId: "lost-after-update")]
         await ReminderStore.syncActivities()
-        let activity = try XCTUnwrap(Activity<ReminderAttributes>.activities.first { $0.attributes.id == "notehub-agenda" })
+        let activity = try XCTUnwrap(Activity<ReminderAttributes>.activities.first { $0.attributes.id == "notehub-event" })
         XCTAssertEqual(activity.content.state.targetId, "event:ongoing")
         XCTAssertNil(ReminderStore.dismissed["event:ongoing"])
         clean()
@@ -173,7 +186,7 @@ final class ReminderTests: XCTestCase {
         seed()
         ReminderStore.items[0].due = Date().timeIntervalSince1970 + 3600
         await ReminderStore.syncActivities()
-        let activity = try XCTUnwrap(Activity<ReminderAttributes>.activities.first { $0.attributes.id == "notehub-agenda" })
+        let activity = try XCTUnwrap(Activity<ReminderAttributes>.activities.first { $0.attributes.id == "notehub-reminder" })
         XCTAssertEqual(activity.activityState, .pending)
         clean()
         await ReminderStore.updateActivities()
@@ -181,7 +194,7 @@ final class ReminderTests: XCTestCase {
     @MainActor func testLiveActivityReflectsTickAndDeletion() async throws {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { throw XCTSkip("Live Activities disabled by simulator settings") }
         seed()
-        let activity = try Activity<ReminderAttributes>.request(attributes: .init(id: "notehub-agenda"), content: ActivityContent(state: .init(title: "Prueba", checklist: ReminderStore.items[0].checklist, kind: "task", targetId: "task:qa", due: ReminderStore.items[0].due), staleDate: nil), pushType: nil)
+        let activity = try Activity<ReminderAttributes>.request(attributes: .init(id: "notehub-reminder"), content: ActivityContent(state: .init(title: "Prueba", checklist: ReminderStore.items[0].checklist, kind: "task", targetId: "task:qa", due: ReminderStore.items[0].due), staleDate: nil), pushType: nil)
         let updated = expectation(description: "Activity reflects the tick")
         let updates = Task { @MainActor in
             for await value in activity.contentUpdates {

@@ -84,13 +84,16 @@ struct ReminderAttributes: ActivityAttributes {
         return content
     }
     struct Presentation: Codable { var targetId: String; var due: Double; var activityId: String }
+    // Events and reminders live in separate activities: iOS can start a scheduled reminder on top of an
+    // ongoing event without the app running, and swiping the reminder away leaves the event underneath.
+    enum Slot: String, CaseIterable { case event = "notehub-event", reminder = "notehub-reminder" }
     static var dismissed: [String: Double] {
         get { decode("dismissedActivities", as: [String: Double].self) ?? [:] }
         set { encode(newValue, key: "dismissedActivities") }
     }
-    static var presentation: Presentation? {
-        get { decode("activityPresentation", as: Presentation.self) }
-        set { encode(newValue, key: "activityPresentation") }
+    static var presentations: [String: Presentation] {
+        get { decode("activityPresentations", as: [String: Presentation].self) ?? [:] }
+        set { encode(newValue, key: "activityPresentations") }
     }
     static var enabledAt: Double {
         get {
@@ -103,22 +106,35 @@ struct ReminderAttributes: ActivityAttributes {
     }
     // Only reminders that have become due since enabling the feature join the queue.
     // Dismissal is tied to the due date so moving an item to a new time enables it again.
-    static func visibleItem(now: Double) -> ReminderItem? {
+    static func dueReminder(now: Double) -> ReminderItem? {
         let activatedAt = enabledAt
-        let available = items.filter { dismissed[$0.id] != $0.due }
-        if let reminder = available.filter({ $0.kind == "task" && $0.due <= now && $0.due >= activatedAt })
-            .sorted(by: { $0.due > $1.due }).first { return reminder }
-        return available.filter { $0.kind == "event" && $0.due <= now && ($0.end ?? $0.due) > now }
+        return items.filter { $0.kind == "task" && dismissed[$0.id] != $0.due && $0.due <= now && $0.due >= activatedAt }
             .sorted { $0.due > $1.due }.first
     }
+    static func ongoingEvent(now: Double) -> ReminderItem? {
+        items.filter { $0.kind == "event" && dismissed[$0.id] != $0.due && $0.due <= now && ($0.end ?? $0.due) > now }
+            .sorted { $0.due > $1.due }.first
+    }
+    // The item in front: a due reminder covers the ongoing event.
+    static func visibleItem(now: Double) -> ReminderItem? { dueReminder(now: now) ?? ongoingEvent(now: now) }
+    static func visibleItem(in slot: Slot, now: Double) -> ReminderItem? {
+        slot == .event ? ongoingEvent(now: now) : dueReminder(now: now)
+    }
+    static func upcomingItem(in slot: Slot, now: Double) -> ReminderItem? {
+        items.filter { $0.due > now && dismissed[$0.id] != $0.due &&
+            (slot == .event ? $0.kind == "event" && ($0.end ?? $0.due) > $0.due : $0.kind == "task") }
+            .sorted { $0.due < $1.due }.first
+    }
     static func content(for item: ReminderItem) -> ActivityContent<ReminderAttributes.ContentState> {
+        // A higher score keeps the reminder above the event on the Lock Screen and in the Dynamic Island.
         ActivityContent(state: .init(title: item.title, checklist: Array(item.checklist.prefix(8)), kind: item.kind,
                                     targetId: item.id, due: item.due, end: item.end),
-                        staleDate: item.end.map { Date(timeIntervalSince1970: $0) })
+                        staleDate: item.end.map { Date(timeIntervalSince1970: $0) },
+                        relevanceScore: item.kind == "event" ? 50 : 100)
     }
     static func dismiss(id: String, due: Double) async {
         dismissed[id] = due
-        // A LiveActivityIntent can restore the underlying event without opening the app.
+        // A LiveActivityIntent can update the activities without opening the app.
         await syncActivities(allowCreation: true)
     }
     static func dismissNotification(id: String, due: Double) async {
@@ -138,45 +154,46 @@ struct ReminderAttributes: ActivityAttributes {
         repeat {
             refreshAgain = false
             queuedCreation = false
-            await reconcileActivity(allowCreation: canCreate, now: now)
+            let all = Activity<ReminderAttributes>.activities
+            // Retire activities from earlier implementations (per-reminder and the single shared agenda).
+            for activity in all where Slot(rawValue: activity.attributes.id) == nil {
+                await activity.end(nil, dismissalPolicy: .immediate)
+            }
+            for slot in Slot.allCases { await reconcile(slot, all: all, allowCreation: canCreate, now: now) }
             canCreate = canCreate || queuedCreation
         } while refreshAgain
     }
-    private static func reconcileActivity(allowCreation: Bool, now: Double) async {
-        let all = Activity<ReminderAttributes>.activities
+    private static func isLive(_ activity: Activity<ReminderAttributes>) -> Bool {
+        activity.activityState != .dismissed && activity.activityState != .ended
+    }
+    private static func reconcile(_ slot: Slot, all: [Activity<ReminderAttributes>], allowCreation: Bool, now: Double) async {
         // A missing activity after reinstalling or system expiry is not a user dismissal.
-        if let previous = presentation,
-           !all.contains(where: { $0.id == previous.activityId && $0.activityState != .dismissed && $0.activityState != .ended }) {
+        if let previous = presentations[slot.rawValue], !all.contains(where: { $0.id == previous.activityId && isLive($0) }) {
             if all.contains(where: { $0.id == previous.activityId && $0.activityState == .dismissed }) {
                 dismissed[previous.targetId] = previous.due
             }
-            presentation = nil
+            presentations[slot.rawValue] = nil
         }
-        var current = all.first { $0.attributes.id == "notehub-agenda" && $0.activityState != .dismissed && $0.activityState != .ended }
-        // Retire activities from the previous per-reminder implementation.
-        for activity in all where activity.attributes.id != "notehub-agenda" {
-            await activity.end(nil, dismissalPolicy: .immediate)
-        }
-        let visible = visibleItem(now: now)
+        let mine = all.filter { $0.attributes.id == slot.rawValue && isLive($0) }
+        var current = mine.first { $0.id == presentations[slot.rawValue]?.activityId } ?? mine.first
+        for extra in mine where extra.id != current?.id { await extra.end(nil, dismissalPolicy: .immediate) }
+        let visible = visibleItem(in: slot, now: now)
         var next = visible
-        if next == nil, #available(iOS 26.0, *) {
-            next = items.filter { $0.due > now && dismissed[$0.id] != $0.due && ($0.kind != "event" || ($0.end ?? $0.due) > $0.due) }
-                .sorted { $0.due < $1.due }.first
-        }
+        if next == nil, #available(iOS 26.0, *) { next = upcomingItem(in: slot, now: now) }
         guard let item = next else {
-            presentation = nil
+            presentations[slot.rawValue] = nil
             if let current { await current.end(nil, dismissalPolicy: .immediate) }
             return
         }
         if #available(iOS 26.0, *), let scheduled = current, scheduled.activityState == .pending {
             // The scheduled date cannot be changed by an update: cancel and reschedule.
             if visible != nil || scheduled.content.state.targetId != item.id || scheduled.content.state.due != item.due {
-                presentation = nil
+                presentations[slot.rawValue] = nil
                 await scheduled.end(nil, dismissalPolicy: .immediate)
                 current = nil
             }
         } else if visible == nil, let active = current {
-            presentation = nil
+            presentations[slot.rawValue] = nil
             await active.end(nil, dismissalPolicy: .immediate)
             current = nil
         }
@@ -184,20 +201,20 @@ struct ReminderAttributes: ActivityAttributes {
         if let current {
             observeDismissal(of: current)
             await current.update(value)
-            presentation = .init(targetId: item.id, due: item.due, activityId: current.id)
+            presentations[slot.rawValue] = .init(targetId: item.id, due: item.due, activityId: current.id)
         } else if allowCreation && ActivityAuthorizationInfo().areActivitiesEnabled {
             do {
                 let activity: Activity<ReminderAttributes>
                 if item.due > now {
                     guard #available(iOS 26.0, *) else { return }
-                    activity = try Activity.request(attributes: .init(id: "notehub-agenda"), content: value, pushType: nil, style: .standard,
+                    activity = try Activity.request(attributes: .init(id: slot.rawValue), content: value, pushType: nil, style: .standard,
                         alertConfiguration: .init(title: "\(item.title)", body: "", sound: .default), start: Date(timeIntervalSince1970: item.due))
                 } else {
-                    activity = try Activity.request(attributes: .init(id: "notehub-agenda"), content: value, pushType: nil)
+                    activity = try Activity.request(attributes: .init(id: slot.rawValue), content: value, pushType: nil)
                 }
-                presentation = .init(targetId: item.id, due: item.due, activityId: activity.id)
+                presentations[slot.rawValue] = .init(targetId: item.id, due: item.due, activityId: activity.id)
                 observeDismissal(of: activity)
-            } catch { NSLog("NoteHub: could not start agenda activity: %@", error.localizedDescription) }
+            } catch { NSLog("NoteHub: could not start %@ activity: %@", slot.rawValue, error.localizedDescription) }
         }
     }
     private static var observedActivityIds: Set<String> = []
@@ -207,12 +224,12 @@ struct ReminderAttributes: ActivityAttributes {
             defer { observedActivityIds.remove(activity.id) }
             for await state in activity.activityStateUpdates {
                 if state == .dismissed || state == .ended {
-                    if let previous = presentation, previous.activityId == activity.id {
+                    if let entry = presentations.first(where: { $0.value.activityId == activity.id }) {
+                        presentations[entry.key] = nil
                         if state == .dismissed {
-                            dismissed[previous.targetId] = previous.due
-                            presentation = nil
+                            dismissed[entry.value.targetId] = entry.value.due
                             await syncActivities(allowCreation: canCreateActivity())
-                        } else { presentation = nil }
+                        }
                     }
                     break
                 }
