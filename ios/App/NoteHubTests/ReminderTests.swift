@@ -167,16 +167,15 @@ final class ReminderTests: XCTestCase {
         ReminderStore.items[0].due = now + 120
         XCTAssertEqual(ReminderStore.visibleItem(now: now + 121)?.id, "task:qa")
     }
-    @MainActor func testOngoingEventRestartsWhenPreviousActivityIsMissing() async throws {
+    @MainActor func testVanishedActivityCountsAsDismissedAndDoesNotReturn() async throws {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { throw XCTSkip("Live Activities disabled") }
         seed()
         let now = Date().timeIntervalSince1970
         ReminderStore.items = [ReminderItem(id: "event:ongoing", title: "Clase actual", kind: "event", due: now - 300, checklist: [], end: now + 3600)]
-        ReminderStore.presentations = ["notehub-event": .init(targetId: "event:ongoing", due: now - 300, activityId: "lost-after-update")]
+        ReminderStore.presentations = ["notehub-event": .init(targetId: "event:ongoing", due: now - 300, activityId: "swiped-while-closed")]
         await ReminderStore.syncActivities()
-        let activity = try XCTUnwrap(Activity<ReminderAttributes>.activities.first { $0.attributes.id == "notehub-event" })
-        XCTAssertEqual(activity.content.state.targetId, "event:ongoing")
-        XCTAssertNil(ReminderStore.dismissed["event:ongoing"])
+        XCTAssertNil(Activity<ReminderAttributes>.activities.first { $0.attributes.id == "notehub-event" && $0.activityState == .active })
+        XCTAssertEqual(ReminderStore.dismissed["event:ongoing"], now - 300)
         clean()
         await ReminderStore.updateActivities()
     }

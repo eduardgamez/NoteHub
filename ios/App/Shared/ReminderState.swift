@@ -167,9 +167,11 @@ struct ReminderAttributes: ActivityAttributes {
         activity.activityState != .dismissed && activity.activityState != .ended
     }
     private static func reconcile(_ slot: Slot, all: [Activity<ReminderAttributes>], allowCreation: Bool, now: Double) async {
-        // A missing activity after reinstalling or system expiry is not a user dismissal.
+        // A widget the user swiped away never comes back. iOS may drop it from the list while the app is
+        // closed, so a started activity that has vanished counts as dismissed too.
         if let previous = presentations[slot.rawValue], !all.contains(where: { $0.id == previous.activityId && isLive($0) }) {
-            if all.contains(where: { $0.id == previous.activityId && $0.activityState == .dismissed }) {
+            if all.contains(where: { $0.id == previous.activityId && $0.activityState == .dismissed })
+                || (!all.contains(where: { $0.id == previous.activityId }) && previous.due <= now) {
                 dismissed[previous.targetId] = previous.due
             }
             presentations[slot.rawValue] = nil
