@@ -476,6 +476,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, [contentedita
 [data-theme='dark'] .rich-block h1 { color: #f0f0ec; }
 [data-theme='dark'] .eyebrow { color: #8d908b; }
 [data-theme='dark'] .rich-block mark { background: #625b35; color: #f1ead0; }
+[data-theme='dark'] [style*='242, 233, 185'], [data-theme='dark'] [style*='242, 233, 185'] *, [data-theme='dark'] [style*='#f2e9b9' i], [data-theme='dark'] [style*='#f2e9b9' i] * { color: #1f1f1d !important; }
 [data-theme='dark'] .rich-block .formula { border-color: var(--accent); background: #29322f; }
 [data-theme='dark'] .checklist-item { color: #d0d2cd; }
 [data-theme='dark'] .checklist-item.done span { color: #777a76; }
