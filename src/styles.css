@@ -947,6 +947,7 @@ html:has(.home-layout), body:has(.home-layout),
 
 .reminder-popover.calendar-creation { position: relative; z-index: auto; }
 .calendar-creation .create-kind { align-self: flex-start; }
+.calendar-creation .creation-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 
 .calendar-event.done, .month-event.done { opacity: .55; }
 
