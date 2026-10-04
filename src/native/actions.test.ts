@@ -20,3 +20,9 @@ it('schedules day-only reminders at 9 local time and gives native items stable s
   expect(items[0].id).toBe('task:reminder');
   expect(new Date(items[0].due * 1000).getHours()).toBe(9);
 });
+it('drops malformed checklist entries instead of sending iOS data it rejects', () => {
+  const tasks = [{ id: 'old', title: 'Antiguo', reminder: true, done: false, due: '2026-09-30T10:00:00Z', checklist: undefined as never }, { id: 'mixed', title: 'Mixto', reminder: true, done: false, due: '2026-09-30T11:00:00Z', checklist: [{ id: 'a', text: 'Uno' }, null, { text: 'sin id' }] as never }];
+  const items = nativeItems(tasks, [{ id: 'broken', title: 'Sin fin', start: '2026-09-30T12:00:00Z', end: 'nope', color: 'green' }]);
+  expect(items.map((item) => item.checklist)).toEqual([[], [{ id: 'a', text: 'Uno', done: false }], []]);
+  expect(items[2]).not.toHaveProperty('end');
+});

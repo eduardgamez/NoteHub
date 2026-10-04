@@ -31,3 +31,11 @@ it('syncs the ongoing event even when iOS returns no pending notification naviga
   await waitFor(() => expect(nativeBridge.sync).toHaveBeenCalledWith({ items: [expect.objectContaining({ id: 'event:ongoing', title: 'Clase actual', end: expect.any(Number) })] }));
   expect(nativeBridge.acknowledgeNavigation).not.toHaveBeenCalled();
 });
+
+it('reschedules every item when iOS reports a permission change', async () => {
+  render(<NativeRuntime />);
+  await waitFor(() => expect(nativeBridge.sync).toHaveBeenCalledTimes(1));
+  const [, listener] = vi.mocked(nativeBridge.addListener).mock.calls.find(([event]) => event === 'permissionChanged')!;
+  listener();
+  await waitFor(() => expect(nativeBridge.sync).toHaveBeenCalledTimes(2));
+});

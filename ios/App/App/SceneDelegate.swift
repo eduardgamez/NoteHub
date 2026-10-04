@@ -23,6 +23,10 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         SceneDelegateProxy.shared.scene(scene, willConnectTo: session, options: connectionOptions)
     }
 
+    func sceneDidBecomeActive(_ scene: UIScene) {
+        NotificationPermission.check(presentingFrom: window)
+    }
+
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
         SceneDelegateProxy.shared.scene(scene, openURLContexts: URLContexts)
     }

@@ -8,7 +8,7 @@ import Security
 public class NoteHubPlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "NoteHubPlugin"
     public let jsName = "NoteHubNative"
-    public let pluginMethods: [CAPPluginMethod] = ["permission", "sync", "refreshActivity", "pendingActions", "acknowledge", "pendingNavigation", "acknowledgeNavigation", "authGet", "authSet", "authRemove"].map { CAPPluginMethod(name: $0, returnType: CAPPluginReturnPromise) }
+    public let pluginMethods: [CAPPluginMethod] = ["permission", "openSettings", "sync", "refreshActivity", "pendingActions", "acknowledge", "pendingNavigation", "acknowledgeNavigation", "authGet", "authSet", "authRemove"].map { CAPPluginMethod(name: $0, returnType: CAPPluginReturnPromise) }
 
     private func authQuery(_ call: CAPPluginCall) -> [String: Any]? {
         guard let key = call.getString("key"), key.hasPrefix("sb-"), key.contains("-auth-token") else {
@@ -51,12 +51,19 @@ public class NoteHubPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     private var navigationObserver: NSObjectProtocol?
+    private var permissionObserver: NSObjectProtocol?
     public override func load() {
         navigationObserver = NotificationCenter.default.addObserver(forName: Notification.Name("NoteHubNotificationOpened"), object: nil, queue: .main) { [weak self] _ in
             self?.notifyListeners("notificationOpened", data: [:])
         }
+        permissionObserver = NotificationCenter.default.addObserver(forName: NotificationPermission.changed, object: nil, queue: .main) { [weak self] _ in
+            self?.notifyListeners("permissionChanged", data: [:])
+        }
     }
-    deinit { if let navigationObserver { NotificationCenter.default.removeObserver(navigationObserver) } }
+    deinit {
+        if let navigationObserver { NotificationCenter.default.removeObserver(navigationObserver) }
+        if let permissionObserver { NotificationCenter.default.removeObserver(permissionObserver) }
+    }
     @objc func pendingNavigation(_ call: CAPPluginCall) { Task { @MainActor in
         if let request = ReminderStore.navigationRequest {
             call.resolve(["navigation": ["id": request.id, "targetId": request.targetId]])
@@ -75,8 +82,15 @@ public class NoteHubPlugin: CAPPlugin, CAPBridgedPlugin {
             }
         } else { center.getNotificationSettings { call.resolve(["enabled": $0.authorizationStatus == .authorized || $0.authorizationStatus == .provisional]) } }
     }
+    @objc func openSettings(_ call: CAPPluginCall) {
+        DispatchQueue.main.async { NotificationPermission.openSettings(); call.resolve() }
+    }
     @objc func sync(_ call: CAPPluginCall) {
-        guard let raw = call.getArray("items"), let data = try? JSONSerialization.data(withJSONObject: raw), let items = try? JSONDecoder().decode([ReminderItem].self, from: data) else { call.reject("Datos de calendario inválidos"); return }
+        guard let raw = call.getArray("items") else { call.reject("Datos de calendario inválidos"); return }
+        // Decode each entry separately: one malformed item must not cancel every other notice.
+        let items = raw.compactMap { entry in
+            (try? JSONSerialization.data(withJSONObject: entry)).flatMap { try? JSONDecoder().decode(ReminderItem.self, from: $0) }
+        }
         Task { @MainActor in
             // Native actions remain authoritative until the web has persisted and acknowledged them.
             var next = items
@@ -100,8 +114,16 @@ public class NoteHubPlugin: CAPPlugin, CAPBridgedPlugin {
                 for item in upcoming {
                     let content = ReminderStore.notificationContent(for: item)
                     let date = Date(timeIntervalSince1970: item.due)
-                    let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
-                    center.add(UNNotificationRequest(identifier: item.id, content: content, trigger: UNCalendarNotificationTrigger(dateMatching: components, repeats: false)))
+                    // Pin the time zone so the notice fires at the saved instant even after travelling or a zone change.
+                    let components = Calendar.current.dateComponents([.timeZone, .year, .month, .day, .hour, .minute, .second], from: date)
+                    center.add(UNNotificationRequest(identifier: item.id, content: content, trigger: UNCalendarNotificationTrigger(dateMatching: components, repeats: false))) { error in
+                        if let error { NSLog("NoteHub: could not schedule %@: %@", item.id, error.localizedDescription) }
+                    }
+                }
+                // Notices for items deleted elsewhere would otherwise linger in Notification Center and open nothing.
+                let known = Set(next.map(\.id))
+                center.getDeliveredNotifications { delivered in
+                    center.removeDeliveredNotifications(withIdentifiers: delivered.map(\.request.identifier).filter { ($0.hasPrefix("task:") || $0.hasPrefix("event:")) && !known.contains($0) })
                 }
                 call.resolve(["scheduled": upcoming.count])
             }
@@ -121,6 +143,42 @@ public class NoteHubPlugin: CAPPlugin, CAPBridgedPlugin {
         call.resolve()
     } }
 
+}
+// Notifications are always on from the app's side; the only switch is iOS Settings.
+enum NotificationPermission {
+    static let changed = Notification.Name("NoteHubNotificationPermissionChanged")
+    private static var alertShown = false
+    static func openSettings() {
+        let target: String
+        if #available(iOS 16.0, *) { target = UIApplication.openNotificationSettingsURLString } else { target = UIApplication.openSettingsURLString }
+        if let url = URL(string: target) { UIApplication.shared.open(url) }
+    }
+    // Runs natively each time the app becomes active, so it does not depend on the web layer having loaded.
+    static func check(presentingFrom window: UIWindow?) {
+        let center = UNUserNotificationCenter.current()
+        center.getNotificationSettings { settings in
+            switch settings.authorizationStatus {
+            case .notDetermined:
+                center.requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in
+                    DispatchQueue.main.async { NotificationCenter.default.post(name: changed, object: nil) }
+                }
+            case .denied:
+                DispatchQueue.main.async {
+                    // iOS shows its own prompt only once; after a denial the user has to be sent to Settings.
+                    guard !alertShown, var presenter = window?.rootViewController else { return }
+                    while let next = presenter.presentedViewController { presenter = next }
+                    if presenter is UIAlertController { return }
+                    alertShown = true
+                    let alert = UIAlertController(title: "Activa las notificaciones", message: "NoteHub necesita las notificaciones para avisarte de tus recordatorios y eventos. Actívalas en Ajustes del iPhone.", preferredStyle: .alert)
+                    alert.addAction(UIAlertAction(title: "Ahora no", style: .cancel) { _ in alertShown = false })
+                    alert.addAction(UIAlertAction(title: "Abrir Ajustes", style: .default) { _ in alertShown = false; openSettings() })
+                    presenter.present(alert, animated: true)
+                }
+            default:
+                DispatchQueue.main.async { NotificationCenter.default.post(name: changed, object: nil) }
+            }
+        }
+    }
 }
 class NoteHubViewController: CAPBridgeViewController {
     override func capacitorDidLoad() { bridge?.registerPluginInstance(NoteHubPlugin()) }
