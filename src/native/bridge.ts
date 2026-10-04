@@ -12,9 +12,9 @@ interface NativeBridge {
   authRemove(options: { key: string }): Promise<void>;
   pendingNavigation(): Promise<{ navigation?: NativeNavigation } | undefined>;
   acknowledgeNavigation(options: { id: string }): Promise<void>;
-  addListener(event: 'notificationOpened', listener: () => void): Promise<PluginListenerHandle>;
+  addListener(event: 'notificationOpened' | 'permissionChanged', listener: () => void): Promise<PluginListenerHandle>;
   permission(options: { request: boolean }): Promise<{ enabled: boolean }>;
-  ensurePermission(): Promise<{ enabled: boolean }>;
+  openSettings(): Promise<void>;
   sync(options: { items: NativeItem[] }): Promise<{ scheduled: number }>;
   refreshActivity(): Promise<void>;
   pendingActions(): Promise<{ actions: NativeAction[] }>;

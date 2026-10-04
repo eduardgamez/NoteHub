@@ -13,7 +13,6 @@ vi.mock('./bridge', async () => {
     pendingActions: vi.fn().mockResolvedValue({ actions: [] }),
     pendingNavigation: vi.fn().mockResolvedValue(undefined),
     acknowledgeNavigation: vi.fn(),
-    ensurePermission: vi.fn().mockResolvedValue({ enabled: true }),
     sync: vi.fn().mockResolvedValue({ scheduled: 0 }),
     refreshActivity: vi.fn().mockResolvedValue(undefined),
     addListener: vi.fn().mockResolvedValue({ remove: vi.fn() }),
@@ -33,15 +32,10 @@ it('syncs the ongoing event even when iOS returns no pending notification naviga
   expect(nativeBridge.acknowledgeNavigation).not.toHaveBeenCalled();
 });
 
-it('asks for notification permission as soon as the app opens', async () => {
-  useWorkspace.setState({ calendarEvents: [] });
+it('reschedules every item when iOS reports a permission change', async () => {
   render(<NativeRuntime />);
-  await waitFor(() => expect(nativeBridge.ensurePermission).toHaveBeenCalled());
-});
-
-it('checks the permission again when the app returns to the front', async () => {
-  render(<NativeRuntime />);
-  await waitFor(() => expect(nativeBridge.ensurePermission).toHaveBeenCalledTimes(1));
-  document.dispatchEvent(new Event('visibilitychange'));
-  await waitFor(() => expect(nativeBridge.ensurePermission).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(nativeBridge.sync).toHaveBeenCalledTimes(1));
+  const [, listener] = vi.mocked(nativeBridge.addListener).mock.calls.find(([event]) => event === 'permissionChanged')!;
+  listener();
+  await waitFor(() => expect(nativeBridge.sync).toHaveBeenCalledTimes(2));
 });

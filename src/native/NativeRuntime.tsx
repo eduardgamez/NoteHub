@@ -40,16 +40,16 @@ export function NativeRuntime() {
       finally { running = false; }
     };
     const visible = () => { if (!document.hidden) void refresh(); };
-    // Asks iOS while undecided, or offers Settings after a denial, every time the app comes to the front.
-    const askPermission = () => nativeBridge.ensurePermission().catch(() => undefined);
-    const foreground = () => { syncedAt = 0; if (!document.hidden) void askPermission().finally(visible); };
+    const foreground = () => { syncedAt = 0; visible(); };
     const unsubscribe = useWorkspace.subscribe((state, previous) => { if (state.tasks !== previous.tasks || state.calendarEvents !== previous.calendarEvents) void refresh(); });
     document.addEventListener('visibilitychange', foreground);
     window.addEventListener('focus', foreground);
     const navigationListener = nativeBridge.addListener('notificationOpened', () => { void refresh(); });
+    // iOS reports the permission natively; reschedule everything once it is granted.
+    const permissionListener = nativeBridge.addListener('permissionChanged', foreground);
     const timer = window.setInterval(visible, 5000);
-    void askPermission().finally(() => { syncedAt = 0; void refresh(); });
-    return () => { stopped = true; void navigationListener.then((listener) => listener.remove()).catch(() => {}); unsubscribe(); clearInterval(timer); document.removeEventListener('visibilitychange', foreground); window.removeEventListener('focus', foreground); };
+    void refresh();
+    return () => { stopped = true; for (const handle of [navigationListener, permissionListener]) void handle.then((listener) => listener.remove()).catch(() => {}); unsubscribe(); clearInterval(timer); document.removeEventListener('visibilitychange', foreground); window.removeEventListener('focus', foreground); };
   }, [hydrated]);
   return null;
 }

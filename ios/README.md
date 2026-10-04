@@ -24,7 +24,7 @@ Ajustes también permite descargar el espacio actual y sus copias locales. Nunca
 
 ## Avisos y pantalla bloqueada
 
-Activa **Notificaciones del iPhone** en Ajustes de NoteHub. Se programan los siguientes 60 eventos y recordatorios; los eventos avisan al inicio y los recordatorios sin hora a las 09:00 locales. Abre NoteHub regularmente para recoger cambios de otros dispositivos y programar los avisos siguientes. No se necesita tener el Mac encendido para que suenen los avisos ya programados.
+Las notificaciones están siempre activas en NoteHub; el único interruptor es Ajustes del iPhone → NoteHub. La primera vez que se abre la app, iOS pide permiso. Si después se desactivan, cada vez que la app pasa a primer plano muestra un aviso con un acceso a Ajustes del iPhone. Se programan los siguientes 60 eventos y recordatorios; los eventos avisan al inicio y los recordatorios sin hora a las 09:00 locales. Abre NoteHub regularmente para recoger cambios de otros dispositivos y programar los avisos siguientes. No se necesita tener el Mac encendido para que suenen los avisos ya programados.
 
 Los avisos de recordatorios muestran únicamente su título, junto al nombre e icono de NoteHub que añade iOS. No incluyen listas de tareas ni botones adicionales. Al pulsar el aviso, se abre la página principal con el recordatorio seleccionado y su editor abierto, incluso si NoteHub estaba cerrada o mostraba otra sección. Si ya se ha eliminado, se abre la página principal. Los avisos de eventos conservan sus acciones; las acciones nativas se guardan aunque la web no esté ejecutándose y se aplican al abrir la app. Quitar un aviso del centro de notificaciones no borra los datos.
 
