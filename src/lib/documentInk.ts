@@ -29,8 +29,21 @@ export function strokeIntersectsRect(stroke: InkStroke, rect: DocumentRect): boo
 
 export const DOCUMENT_WIDTH = 850;
 
-export function fitDocumentScale(availableWidth: number): number {
-  return availableWidth <= 0 ? 1 : Math.min(1, availableWidth / DOCUMENT_WIDTH);
+const DOCUMENT_PADDING = 58;
+const COLUMN_GAP = 14;
+const MIN_VISIBLE_COLUMN = 160;
+
+// The page is always laid out at DOCUMENT_WIDTH so text, blocks and ink keep
+// the same geometry everywhere. When a row has 3+ columns and fitting the whole
+// page would make them too narrow, zoom so two columns fill the screen and the
+// rest is reached by scrolling sideways.
+export function fitDocumentScale(availableWidth: number, maxColumns = 1): number {
+  if (availableWidth <= 0) return 1;
+  const fit = Math.min(1, availableWidth / DOCUMENT_WIDTH);
+  if (maxColumns < 3) return fit;
+  const column = (DOCUMENT_WIDTH - 2 * DOCUMENT_PADDING - COLUMN_GAP * (maxColumns - 1)) / maxColumns;
+  if (column * fit >= MIN_VISIBLE_COLUMN) return fit;
+  return Math.max(fit, Math.min(1, availableWidth / (DOCUMENT_PADDING + 2 * column + COLUMN_GAP)));
 }
 
 export function readDocumentScale(page: HTMLElement): number {

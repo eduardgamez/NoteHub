@@ -8,6 +8,16 @@ describe('uniform document scaling', () => {
     expect(fitDocumentScale(0)).toBe(1);
   });
 
+  it('zooms narrow screens so two of three or more columns fit across', () => {
+    expect(fitDocumentScale(340, 2)).toBe(.4);
+    const three = fitDocumentScale(380, 3);
+    const column = (850 - 116 - 28) / 3;
+    expect(three).toBeCloseTo(380 / (58 + 2 * column + 14));
+    expect(fitDocumentScale(380, 4)).toBeGreaterThan(three);
+    expect(fitDocumentScale(800, 3)).toBe(800 / 850);
+    expect(fitDocumentScale(560, 4)).toBe(1);
+  });
+
   it('measures blocks and maps pointer input in canonical coordinates', () => {
     const page = document.createElement('article');
     const block = document.createElement('div'); block.dataset.blockId = 'drawing'; page.append(block);
