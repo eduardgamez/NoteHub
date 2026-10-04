@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { seedWorkspace } from '../data/seed';
 import { loadWorkspace } from '../lib/storage';
 import { cloudSync } from '../sync/cloudSync';
+import { syncEngine } from '../sync/syncEngine';
 import type { PendingProposal } from '../types';
+import type { SyncOperation } from '../sync/syncEngine';
 
 vi.mock('../lib/storage', () => ({ loadWorkspace: vi.fn(), preserveWorkspace: vi.fn().mockResolvedValue(undefined), scheduleSave: vi.fn() }));
 vi.mock('../sync/syncEngine', () => ({ syncEngine: { publish: vi.fn(), subscribe: vi.fn() } }));
@@ -197,6 +199,42 @@ describe('block layout mutations and device replay', () => {
     expect(useWorkspace.getState().notes.sensitivity).toEqual(initial);
     store.redo(initial.id);
     expect(useWorkspace.getState().notes.sensitivity).toEqual(moved);
+  });
+
+  it('sends undo and redo to other devices so they show the same columns', () => {
+    const store = useWorkspace.getState();
+    const initial = structuredClone(store.notes.sensitivity);
+    const [target, source] = initial.blocks.filter((block) => !block.isTitle);
+    store.reorderBlock(initial.id, source.id, target.id, false, true);
+    vi.mocked(syncEngine.publish).mockClear();
+    store.undo(initial.id);
+    expect(syncEngine.publish).toHaveBeenCalledWith({ kind: 'note.upsert', note: initial });
+    store.redo(initial.id);
+    expect(vi.mocked(syncEngine.publish).mock.calls.at(-1)?.[0]).toMatchObject({ kind: 'note.upsert', note: { id: initial.id } });
+  });
+
+  it('applies the sender\'s whole layout for a move, even if this device had drifted', () => {
+    const initial = structuredClone(useWorkspace.getState().notes.sensitivity);
+    const [target, source] = initial.blocks.filter((block) => !block.isTitle);
+    useWorkspace.getState().reorderBlock(initial.id, source.id, target.id, false, true);
+    const expected = structuredClone(useWorkspace.getState().notes.sensitivity.blocks);
+    const sent = vi.mocked(syncEngine.publish).mock.calls.at(-1)![0];
+    const drifted = { ...initial, blocks: initial.blocks.map((block) => block.isTitle ? block : { ...block, layoutGroupId: 'stale-row', layoutColumnId: crypto.randomUUID() }) };
+    useWorkspace.setState({ notes: { ...useWorkspace.getState().notes, sensitivity: drifted } });
+    useWorkspace.getState().applyRemote({ ...sent, source: 'other-device', opId: 'absolute-move', timestamp: 1 } as SyncOperation);
+    expect(useWorkspace.getState().notes.sensitivity.blocks.map(({ id, layoutGroupId, layoutColumnId }) => ({ id, layoutGroupId, layoutColumnId })))
+      .toEqual(expected.map(({ id, layoutGroupId, layoutColumnId }) => ({ id, layoutGroupId, layoutColumnId })));
+  });
+
+  it('keeps a block in its row when an edit arrives with an older position', () => {
+    const initial = structuredClone(useWorkspace.getState().notes.sensitivity);
+    const [target, source] = initial.blocks.filter((block) => !block.isTitle);
+    useWorkspace.getState().reorderBlock(initial.id, source.id, target.id, false, true);
+    const placed = useWorkspace.getState().notes.sensitivity.blocks.find((block) => block.id === source.id)!;
+    useWorkspace.getState().applyRemote({ kind: 'block.upsert', noteId: initial.id, block: { ...source, content: '<p>edited</p>' }, source: 'other-device', opId: 'stale-edit', timestamp: 2 });
+    const edited = useWorkspace.getState().notes.sensitivity.blocks.find((block) => block.id === source.id)!;
+    expect(edited).toMatchObject({ content: '<p>edited</p>', layoutGroupId: placed.layoutGroupId, layoutColumnId: placed.layoutColumnId });
+    expect(useWorkspace.getState().history.sensitivity).toBeUndefined();
   });
 });
 

@@ -36,14 +36,17 @@ const STANDARD_COLUMN = (DOCUMENT_CONTENT_WIDTH - COLUMN_GAP) / 2;
 
 // Rows with up to two columns use the standard content width. Rows with three
 // or more keep the two-column width per column, so text and blocks keep the
-// same proportions and the extra columns extend the page sideways. This
-// depends only on the document, so ink sits on the same content everywhere.
-export function documentRowWidth(columns: number): number {
-  return columns < 3 ? DOCUMENT_CONTENT_WIDTH : columns * STANDARD_COLUMN + (columns - 1) * COLUMN_GAP;
+// same proportions and the extra columns extend the page sideways. A row is
+// never wrapped onto several lines: what is one row in the document is one row
+// on every screen, and the width depends only on the document, so ink sits on
+// the same content everywhere.
+export function documentRowWidth(columns: number, minimumWidths: number[] = []): number {
+  const standard = columns < 3 ? DOCUMENT_CONTENT_WIDTH : columns * STANDARD_COLUMN + (columns - 1) * COLUMN_GAP;
+  return Math.max(standard, minimumWidths.reduce((sum, width) => sum + width, (minimumWidths.length - 1) * COLUMN_GAP));
 }
 
-export function documentPageWidth(maxColumns: number): number {
-  return documentRowWidth(maxColumns) + 2 * DOCUMENT_PADDING;
+export function documentPageWidth(rowWidths: number[]): number {
+  return Math.max(DOCUMENT_CONTENT_WIDTH, ...rowWidths) + 2 * DOCUMENT_PADDING;
 }
 
 export function fitDocumentScale(availableWidth: number): number {

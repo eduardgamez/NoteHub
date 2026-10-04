@@ -15,16 +15,19 @@ function selectionRect(start: Point, end: Point): DocumentRect {
   return { x: Math.min(start.x, end.x), y: Math.min(start.y, end.y), width: Math.abs(end.x - start.x), height: Math.abs(end.y - start.y) };
 }
 
+// A table needs its full width; other columns can shrink to 160px.
+const columnMinWidth = (blocks: CanvasBlock[], rowWidth: number) => Math.min(rowWidth, Math.max(160, ...blocks.filter((block) => block.type === 'table').map((block) => (block.tableColumnWidths?.reduce((sum, width) => sum + width, 4) ?? (block.tableColumnCount ?? (() => { try { return JSON.parse(block.content)[0]?.length ?? 0; } catch { return 0; } })()) * 90 + 4) + 25)));
+
 export function CanvasWorkspace() {
   const pageRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLInputElement>(null);
-  const dragRef = useRef<{ blockId: string; startX: number; startY: number; clientX: number; clientY: number; targetId?: string; before?: boolean; side?: boolean } | null>(null);
+  const dragRef = useRef<{ blockId: string; startX: number; startY: number; clientX: number; clientY: number; targetId?: string; before?: boolean; side?: boolean; row?: boolean } | null>(null);
   const marqueeRef = useRef<{ pointerId: number; start: Point; dragging: boolean } | null>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const inkMoveRef = useRef<{ pointerId: number; startX: number; startY: number; ids: string[] } | null>(null);
   const crossTextRangeRef = useRef<Range | null>(null);
   const crossTextToolsRef = useRef<HTMLDivElement>(null);
-  const [dropTarget, setDropTarget] = useState<{ blockId: string; targetId: string; before: boolean; side: boolean } | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ blockId: string; targetId: string; before: boolean; side: boolean; row: boolean } | null>(null);
   const [marquee, setMarquee] = useState<DocumentRect | null>(null);
   const [selectedStrokeIds, setSelectedStrokeIds] = useState<string[]>([]);
   const [inkMove, setInkMove] = useState<{ ids: string[]; dx: number; dy: number } | null>(null);
@@ -33,9 +36,11 @@ export function CanvasWorkspace() {
   const [pageHeight, setPageHeight] = useState(0);
   const [crossTextPosition, setCrossTextPosition] = useState<{ left: number; top: number } | null>(null);
   const note = useWorkspace((state) => state.notes[state.activeNoteId]);
-  const rows = blockRows(note.blocks);
-  const maxColumns = Math.max(1, ...rows.map((row) => row.columns.length));
-  const pageWidth = documentPageWidth(maxColumns);
+  const rows = blockRows(note.blocks).map((row) => {
+    const minimums = row.columns.map((column) => columnMinWidth(column.blocks, documentRowWidth(row.columns.length)));
+    return { ...row, minimums, width: documentRowWidth(row.columns.length, minimums) };
+  });
+  const pageWidth = documentPageWidth(rows.map((row) => row.width));
   const documentZoom = fitDocumentScale(availableWidth);
   const documentFitted = documentZoom * pageWidth <= availableWidth + 1;
   const selectedIds = useWorkspace((state) => state.selectedIds);
@@ -187,7 +192,8 @@ export function CanvasWorkspace() {
     drag.targetId = drop.targetId;
     drag.before = drop.before;
     drag.side = drop.side;
-    setDropTarget((previous) => previous?.blockId === blockId && previous.targetId === drop.targetId && previous.before === drop.before && previous.side === drop.side ? previous : { blockId, ...drop });
+    drag.row = drop.row;
+    setDropTarget((previous) => previous?.blockId === blockId && previous.targetId === drop.targetId && previous.before === drop.before && previous.side === drop.side && previous.row === drop.row ? previous : { blockId, ...drop });
     if (viewport) {
       const edge = viewport.getBoundingClientRect();
       if (clientX < edge.left + 40) viewport.scrollBy(-18, 0);
@@ -209,10 +215,9 @@ export function CanvasWorkspace() {
     if (!cancel && drag?.blockId === blockId) moveReorder(blockId, drag.clientX, drag.clientY);
     dragRef.current = null;
     setDropTarget(null);
-    if (!cancel && drag?.blockId === blockId && drag.targetId) reorderBlock(note.id, blockId, drag.targetId, Boolean(drag.before), Boolean(drag.side));
+    if (!cancel && drag?.blockId === blockId && drag.targetId) reorderBlock(note.id, blockId, drag.targetId, Boolean(drag.before), Boolean(drag.side), true, true, Boolean(drag.row));
   }, [note.id, reorderBlock, moveReorder]);
 
-  const columnMinWidth = (blocks: CanvasBlock[], rowWidth: number) => Math.min(rowWidth, Math.max(160, ...blocks.filter((block) => block.type === 'table').map((block) => (block.tableColumnWidths?.reduce((sum, width) => sum + width, 4) ?? (block.tableColumnCount ?? (() => { try { return JSON.parse(block.content)[0]?.length ?? 0; } catch { return 0; } })()) * 90 + 4) + 25)));
   const selectedStrokes = note.strokes.filter((stroke) => selectedStrokeIds.includes(stroke.id)).map((stroke) => projectStroke(stroke, note.blocks, layout)).filter((stroke) => stroke !== null);
   const strokeBox = selectedStrokes.length ? selectedStrokes.reduce<DocumentRect>((box, stroke) => {
     const right = Math.max(box.x + box.width, stroke.bounds.x + stroke.bounds.width);
@@ -277,13 +282,10 @@ export function CanvasWorkspace() {
       <article ref={pageRef} className="document-page" style={{ width: pageWidth, minWidth: pageWidth, maxWidth: pageWidth, transform: `scale(${documentZoom})` }}>
         <div className="document-blocks">
           {rows.map((row) => {
-            const rowWidth = documentRowWidth(row.columns.length);
-            const shouldWrap = row.columns.reduce((width, column) => width + columnMinWidth(column.blocks, rowWidth), 14 * (row.columns.length - 1)) > rowWidth;
-            const wideTable = row.columns.some((column) => column.blocks.some((block) => block.type === 'table') && columnMinWidth(column.blocks, rowWidth) > rowWidth / 2);
-            const columns = shouldWrap && wideTable ? [...row.columns].sort((a, b) => Number(b.blocks.some((block) => block.type === 'table')) - Number(a.blocks.some((block) => block.type === 'table'))) : row.columns;
-            return <div className="document-block-row" data-row-id={row.id} key={row.id} style={{ width: rowWidth }}>
-            {columns.map((column) => <div className={`document-block-column ${column.blocks.some((block) => block.type === 'table') ? 'has-table' : ''}`} key={column.id} style={{ minWidth: columnMinWidth(column.blocks, rowWidth) }}>
-              {column.blocks.map((block) => <BlockCard key={block.id} block={block} zoom={documentZoom} selected={selectedIds.includes(block.id)} active={activeBlockId === block.id} onAskAI={askAI} onReorderStart={startReorder} onReorderMove={moveReorder} onReorderEnd={endReorder} reorderClass={`${dropTarget?.blockId === block.id ? 'is-reordering' : ''} ${dropTarget?.targetId === block.id ? dropTarget.side ? dropTarget.before ? 'drop-left' : 'drop-right' : dropTarget.before ? 'drop-before' : 'drop-after' : ''}`} />)}
+            const rowDrop = dropTarget?.row && row.columns.some((column) => column.blocks.some((block) => block.id === dropTarget.targetId)) ? dropTarget.before ? 'drop-row-before' : 'drop-row-after' : '';
+            return <div className={`document-block-row ${rowDrop}`} data-row-id={row.id} key={row.id} style={{ width: row.width }}>
+            {row.columns.map((column, index) => <div className={`document-block-column ${column.blocks.some((block) => block.type === 'table') ? 'has-table' : ''}`} key={column.id} style={{ minWidth: row.minimums[index] }}>
+              {column.blocks.map((block) => <BlockCard key={block.id} block={block} zoom={documentZoom} selected={selectedIds.includes(block.id)} active={activeBlockId === block.id} onAskAI={askAI} onReorderStart={startReorder} onReorderMove={moveReorder} onReorderEnd={endReorder} reorderClass={`${dropTarget?.blockId === block.id ? 'is-reordering' : ''} ${dropTarget?.targetId === block.id && !dropTarget.row ? dropTarget.side ? dropTarget.before ? 'drop-left' : 'drop-right' : dropTarget.before ? 'drop-before' : 'drop-after' : ''}`} />)}
             </div>)}
           </div>; })}
         </div>

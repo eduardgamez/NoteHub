@@ -1,3 +1,4 @@
+import type { BlockPlacement } from '../lib/blockLayout';
 import type { CalendarEvent, CanvasBlock, ChatMessageRecord, ChatSession, Exercise, Folder, FolderContext, InkStroke, Note, PendingProposal, PersonalProfile, Project, Routine, Task, Workout, WorkspaceStateData } from '../types';
 import { cloudSync } from './cloudSync';
 
@@ -9,7 +10,7 @@ export type SyncPayload =
   | { kind: 'note.upsert'; note: Note }
   | { kind: 'note.remove'; noteId: string }
   | { kind: 'block.upsert'; noteId: string; block: CanvasBlock; afterBlockId?: string }
-  | { kind: 'block.reorder'; noteId: string; blockId: string; targetId: string; before: boolean; side?: boolean }
+  | { kind: 'block.reorder'; noteId: string; blockId: string; targetId: string; before: boolean; side?: boolean; row?: boolean; layout?: BlockPlacement[] }
   | { kind: 'block.remove'; noteId: string; blockId: string }
   | { kind: 'stroke.add'; noteId: string; stroke: InkStroke }
   | { kind: 'stroke.move'; noteId: string; strokeIds: string[]; dx: number; dy: number }

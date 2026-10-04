@@ -6,7 +6,7 @@ import { loadWorkspace, preserveWorkspace, scheduleSave } from '../lib/storage';
 import { syncEngine, type SyncOperation } from '../sync/syncEngine';
 import { cloudSync } from '../sync/cloudSync';
 import { makeBlock } from '../lib/blockFactory';
-import { insertInLayout, moveInLayout } from '../lib/blockLayout';
+import { applyLayout, insertInLayout, layoutOf, moveInLayout } from '../lib/blockLayout';
 import { ensureTitleBlock, titleFromBlock } from '../lib/noteTitle';
 import { isStarterWorkspace } from '../lib/starterWorkspace';
 import { updateAIProfile, migrateAIProfileText, profileSummary, validProfileUpdates } from '../ai/personalProfile';
@@ -57,7 +57,7 @@ interface WorkspaceStore extends WorkspaceStateData {
   redo: (noteId: string) => void;
   upsertBlock: (noteId: string, block: CanvasBlock, broadcast?: boolean, recordHistory?: boolean) => void;
   insertBlockAfter: (noteId: string, block: CanvasBlock, afterBlockId?: string | null, broadcast?: boolean, recordHistory?: boolean) => void;
-  reorderBlock: (noteId: string, blockId: string, targetId: string, before: boolean, side?: boolean, broadcast?: boolean, recordHistory?: boolean) => void;
+  reorderBlock: (noteId: string, blockId: string, targetId: string, before: boolean, side?: boolean, broadcast?: boolean, recordHistory?: boolean, row?: boolean) => void;
   removeSelectedBlocks: () => void;
   copySelectedBlocks: () => void;
   pasteBlocks: () => void;
@@ -315,6 +315,8 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
       selectedIds: [], activeBlockId: null,
     });
     persist(get());
+    // Other devices must show the same restored document.
+    syncEngine.publish({ kind: 'note.upsert', note: previous });
   },
   redo(noteId) {
     const state = get();
@@ -328,12 +330,15 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
       selectedIds: [], activeBlockId: null,
     });
     persist(get());
+    syncEngine.publish({ kind: 'note.upsert', note: next });
   },
   upsertBlock(noteId, block, broadcast = true, recordHistory = true) {
     set((state) => {
       const note = state.notes[noteId];
       const exists = note.blocks.some((item) => item.id === block.id);
-      const blocks = exists ? note.blocks.map((item) => item.id === block.id ? block : item) : [...note.blocks, block];
+      // Editing a block never moves it: rows and columns change only through
+      // insertBlockAfter/reorderBlock, so a stale copy cannot undo a move.
+      const blocks = exists ? note.blocks.map((item) => item.id === block.id ? { ...block, layoutGroupId: item.layoutGroupId, layoutColumnId: item.layoutColumnId } : item) : [...note.blocks, block];
       return {
         ...(recordHistory ? withCheckpoint(state, noteId) : {}),
         notes: { ...state.notes, [noteId]: { ...note, title: block.isTitle ? titleFromBlock(block.content) : note.title, blocks, updatedAt: Date.now() } },
@@ -353,17 +358,19 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
     persist(get());
     if (broadcast) syncEngine.publish({ kind: 'block.upsert', noteId, block, ...(afterBlockId ? { afterBlockId } : {}) });
   },
-  reorderBlock(noteId, blockId, targetId, before, side = false, broadcast = true, recordHistory = true) {
+  reorderBlock(noteId, blockId, targetId, before, side = false, broadcast = true, recordHistory = true, row = false) {
     const note = get().notes[noteId];
     if (!note) return;
-    const next = moveInLayout(note.blocks, blockId, targetId, before, side);
+    const next = moveInLayout(note.blocks, blockId, targetId, before, side, row);
     if (next === note.blocks || next.every((item, index) => item.id === note.blocks[index].id && (item.layoutGroupId ?? item.id) === (note.blocks[index].layoutGroupId ?? note.blocks[index].id) && (item.layoutColumnId ?? item.id) === (note.blocks[index].layoutColumnId ?? note.blocks[index].id))) return;
     set((state) => ({
       ...(recordHistory ? withCheckpoint(state, noteId) : {}),
       notes: { ...state.notes, [noteId]: { ...state.notes[noteId], blocks: next, updatedAt: Date.now() } },
     }));
     persist(get());
-    if (broadcast) syncEngine.publish({ kind: 'block.reorder', noteId, blockId, targetId, before, side });
+    // The resulting layout travels with the move, so every device ends up with
+    // exactly these rows and columns even if its copy had drifted.
+    if (broadcast) syncEngine.publish({ kind: 'block.reorder', noteId, blockId, targetId, before, side, row, layout: layoutOf(next) });
   },
   removeSelectedBlocks() {
     const { activeNoteId, selectedIds } = get();
@@ -683,7 +690,8 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
       if (note?.blocks.some((block) => block.id === operation.block.id)) get().upsertBlock(operation.noteId, operation.block, false, false);
       else get().insertBlockAfter(operation.noteId, operation.block, operation.afterBlockId, false, false);
     }
-    if (operation.kind === 'block.reorder') get().reorderBlock(operation.noteId, operation.blockId, operation.targetId, operation.before, operation.side, false, false);
+    if (operation.kind === 'block.reorder' && operation.layout) set((state) => state.notes[operation.noteId] ? { notes: { ...state.notes, [operation.noteId]: { ...state.notes[operation.noteId], blocks: applyLayout(state.notes[operation.noteId].blocks, operation.layout!), updatedAt: Date.now() } } } : state);
+    else if (operation.kind === 'block.reorder') get().reorderBlock(operation.noteId, operation.blockId, operation.targetId, operation.before, operation.side, false, false, operation.row);
     if (operation.kind === 'stroke.add') get().addStroke(operation.noteId, operation.stroke, false, false);
     if (operation.kind === 'stroke.move') get().moveStrokes(operation.noteId, operation.strokeIds, operation.dx, operation.dy, false, false);
     if (operation.kind === 'stroke.clear') set((state) => ({ notes: { ...state.notes, [operation.noteId]: { ...state.notes[operation.noteId], strokes: [] } } }));
@@ -713,6 +721,14 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
     if (operation.kind === 'chat.messages.remove') set((state) => ({ chatThreads: { ...state.chatThreads, [operation.threadId]: (state.chatThreads[operation.threadId] ?? []).filter((message) => !operation.messageIds.includes(message.id)) } }));
     if (operation.kind === 'chat.message') set((state) => state.chatSessions[operation.threadId] ? ({ chatThreads: { ...state.chatThreads, [operation.threadId]: (state.chatThreads[operation.threadId] ?? []).some((message) => message.id === operation.message.id) ? state.chatThreads[operation.threadId] : [...(state.chatThreads[operation.threadId] ?? []), operation.message] } }) : state);
     if (operation.kind === 'proposal.upsert') set((state) => ({ pendingProposals: state.pendingProposals.some((item) => item.id === operation.proposal.id) ? state.pendingProposals.map((item) => item.id === operation.proposal.id ? operation.proposal : item) : [...state.pendingProposals, operation.proposal] }));
+    // Undo now syncs, so it must not restore a copy that predates another
+    // device's change to this document and erase that change everywhere.
+    const changedNote = 'noteId' in operation ? operation.noteId : operation.kind === 'note.upsert' ? operation.note.id : undefined;
+    if (changedNote && (get().history[changedNote] || get().future[changedNote])) set((state) => {
+      const history = { ...state.history }, future = { ...state.future };
+      delete history[changedNote]; delete future[changedNote];
+      return { history, future };
+    });
     persist(get());
   },
 }));

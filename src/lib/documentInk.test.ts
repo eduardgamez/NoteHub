@@ -12,8 +12,13 @@ describe('uniform document scaling', () => {
     expect(documentRowWidth(1)).toBe(734);
     expect(documentRowWidth(2)).toBe(734);
     expect(documentRowWidth(3)).toBe(3 * 360 + 28);
-    expect(documentPageWidth(2)).toBe(850);
-    expect(documentPageWidth(4)).toBe(4 * 360 + 42 + 116);
+    expect(documentPageWidth([734, 734])).toBe(850);
+    expect(documentPageWidth([734, documentRowWidth(4)])).toBe(4 * 360 + 42 + 116);
+  });
+
+  it('widens a row for wide tables instead of wrapping its columns', () => {
+    expect(documentRowWidth(2, [600, 160])).toBe(774);
+    expect(documentRowWidth(2, [300, 160])).toBe(734);
   });
 
   it('measures blocks and maps pointer input in canonical coordinates', () => {

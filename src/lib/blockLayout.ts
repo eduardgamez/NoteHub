@@ -44,25 +44,63 @@ export function insertInLayout(blocks: CanvasBlock[], block: CanvasBlock, afterB
   return flatten(rows);
 }
 
-export function moveInLayout(blocks: CanvasBlock[], blockId: string, targetId: string, before: boolean, side: boolean): CanvasBlock[] {
+// side: a new column beside the target. row: a new row of its own before or
+// after the target's whole row. Otherwise the block stacks in the target's column.
+export function moveInLayout(blocks: CanvasBlock[], blockId: string, targetId: string, before: boolean, side: boolean, row = false): CanvasBlock[] {
   const source = blocks.find((block) => block.id === blockId);
   const target = blocks.find((block) => block.id === targetId);
-  if (!source || !target || blockId === targetId || source.isTitle || (side && target.isTitle)) return blocks;
+  if (!source || !target || blockId === targetId || source.isTitle || ((side || row) && target.isTitle)) return blocks;
   const rows = blockRows(blocks);
-  for (const row of rows) for (const column of row.columns) column.blocks = column.blocks.filter((block) => block.id !== blockId);
-  const row = rows.find((item) => item.columns.some((column) => column.blocks.some((block) => block.id === targetId)))!;
-  const columnIndex = row.columns.findIndex((column) => column.blocks.some((block) => block.id === targetId));
-  if (side) {
+  for (const item of rows) for (const column of item.columns) column.blocks = column.blocks.filter((block) => block.id !== blockId);
+  const rowIndex = rows.findIndex((item) => item.columns.some((column) => column.blocks.some((block) => block.id === targetId)));
+  const targetRow = rows[rowIndex];
+  const columnIndex = targetRow.columns.findIndex((column) => column.blocks.some((block) => block.id === targetId));
+  if (row) {
+    const occupied = (id: string) => rows.some((item) => item.id === id && item.columns.some((column) => column.blocks.length));
+    let id = `${source.id}:row`;
+    for (let suffix = 1; occupied(id); suffix++) id = `${source.id}:row:${suffix}`;
+    rows.splice(rowIndex + (before ? 0 : 1), 0, { id, columns: [{ id, blocks: [source] }] });
+  } else if (side) {
     const base = `${source.id}:${target.id}:${before ? 'left' : 'right'}`;
     let id = base;
-    for (let suffix = 1; row.columns.some((column) => column.id === id && column.blocks.length); suffix++) id = `${base}:${suffix}`;
-    row.columns.splice(columnIndex + (before ? 0 : 1), 0, { id, blocks: [source] });
+    for (let suffix = 1; targetRow.columns.some((column) => column.id === id && column.blocks.length); suffix++) id = `${base}:${suffix}`;
+    targetRow.columns.splice(columnIndex + (before ? 0 : 1), 0, { id, blocks: [source] });
   } else {
-    const column = row.columns[columnIndex];
+    const column = targetRow.columns[columnIndex];
     const index = column.blocks.findIndex((block) => block.id === targetId);
     column.blocks.splice(index + (before && !target.isTitle ? 0 : 1), 0, source);
   }
   return flatten(rows);
+}
+
+export interface BlockPlacement { id: string; row: string; column: string }
+
+export function layoutOf(blocks: CanvasBlock[]): BlockPlacement[] {
+  return blocks.map((block) => ({ id: block.id, row: block.layoutGroupId ?? block.id, column: block.layoutColumnId ?? block.id }));
+}
+
+// Puts the blocks exactly where another device has them. Blocks this device
+// has but the other did not know about keep their place after the block that
+// precedes them here; placements for blocks deleted here are ignored.
+export function applyLayout(blocks: CanvasBlock[], placements: BlockPlacement[]): CanvasBlock[] {
+  const byId = new Map(blocks.map((block) => [block.id, block]));
+  const placed = new Set<string>();
+  const result: CanvasBlock[] = [];
+  for (const placement of placements) {
+    const block = byId.get(placement.id);
+    if (!block || placed.has(block.id)) continue;
+    placed.add(block.id);
+    result.push({ ...block, layoutGroupId: placement.row, layoutColumnId: placement.column });
+  }
+  blocks.forEach((block, index) => {
+    if (placed.has(block.id)) return;
+    const previous = blocks.slice(0, index).reverse().find((item) => result.some((placedBlock) => placedBlock.id === item.id));
+    result.splice(previous ? result.findIndex((item) => item.id === previous.id) + 1 : 0, 0, block);
+    placed.add(block.id);
+  });
+  const title = result.findIndex((block) => block.isTitle);
+  if (title > 0) result.unshift(...result.splice(title, 1));
+  return result;
 }
 
 export interface DropBlock {
@@ -82,11 +120,16 @@ export function findBlockDrop(candidates: DropBlock[], x: number, y: number) {
     else rows.set(block.rowId, { top: block.top, bottom: block.bottom, blocks: [block] });
   }
   const row = [...rows.values()].reduce((best, next) => gap(y, next.top, next.bottom) < gap(y, best.top, best.bottom) ? next : best);
+  // Above or below a row with several columns, the block gets a row of its own.
+  if (new Set(row.blocks.map((block) => block.left)).size > 1 && (y < row.top || y > row.bottom)) {
+    const edge = row.blocks.reduce((best, next) => gap(x, next.left, next.right) < gap(x, best.left, best.right) ? next : best);
+    return { targetId: edge.id, side: false, before: y < row.top, row: true };
+  }
   const target = row.blocks.reduce((best, next) => {
     const nextX = gap(x, next.left, next.right), bestX = gap(x, best.left, best.right);
     return nextX < bestX || (nextX === bestX && gap(y, next.top, next.bottom) < gap(y, best.top, best.bottom)) ? next : best;
   });
   const zone = target.drawing ? .38 : .24;
   const side = !target.title && y >= target.top && y <= target.bottom && (x < target.left + (target.right - target.left) * zone || x > target.right - (target.right - target.left) * zone);
-  return { targetId: target.id, side, before: target.title ? false : side ? x < (target.left + target.right) / 2 : y < (target.top + target.bottom) / 2 };
+  return { targetId: target.id, side, before: target.title ? false : side ? x < (target.left + target.right) / 2 : y < (target.top + target.bottom) / 2, row: false };
 }

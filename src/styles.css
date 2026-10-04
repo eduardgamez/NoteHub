@@ -258,7 +258,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, [contentedita
 .document-title > span { display: block; margin-bottom: 12px; font-size: 30px; }
 .document-title h1 { margin: 0; color: var(--text); font-family: Georgia, serif; font-size: 38px; font-weight: 500; letter-spacing: -.035em; }
 .document-blocks { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 14px; }
-.document-block-row { width: 100%; min-width: 0; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 14px; }
+.document-block-row { position: relative; width: 100%; min-width: 0; display: flex; align-items: flex-start; gap: 14px; }
 .document-block-column { min-width: 0; flex: 1 1 0; display: flex; flex-direction: column; gap: 14px; }
 .document-block-column.has-table { padding-right: 25px; }
 .document-mode .canvas-block { position: relative; width: 100% !important; min-height: 0; transform: none !important; border-color: transparent; border-radius: 5px; background: transparent; box-shadow: none; }
@@ -271,6 +271,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, [contentedita
 .document-mode .canvas-block.drop-before::before, .document-mode .canvas-block.drop-after::after { content: ''; position: absolute; z-index: 6; left: 0; right: 0; height: 2px; border-radius: 2px; background: var(--purple); pointer-events: none; }
 .document-mode .canvas-block.drop-before::before { top: -8px; }
 .document-mode .canvas-block.drop-after::after { bottom: -8px; }
+.document-mode .document-block-row.drop-row-before::before, .document-mode .document-block-row.drop-row-after::after { content: ''; position: absolute; z-index: 6; left: 0; right: 0; height: 2px; border-radius: 2px; background: var(--purple); pointer-events: none; }
+.document-mode .document-block-row.drop-row-before::before { top: -8px; }
+.document-mode .document-block-row.drop-row-after::after { bottom: -8px; }
 .document-mode .canvas-block.drop-left::before, .document-mode .canvas-block.drop-right::after { content: ''; position: absolute; z-index: 6; top: 0; bottom: 0; width: 2px; border-radius: 2px; background: var(--purple); pointer-events: none; }
 .document-mode .canvas-block.drop-left::before { left: -8px; }
 .document-mode .canvas-block.drop-right::after { right: -8px; }
