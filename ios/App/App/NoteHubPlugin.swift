@@ -8,7 +8,7 @@ import Security
 public class NoteHubPlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "NoteHubPlugin"
     public let jsName = "NoteHubNative"
-    public let pluginMethods: [CAPPluginMethod] = ["permission", "sync", "refreshActivity", "pendingActions", "acknowledge", "pendingNavigation", "acknowledgeNavigation", "authGet", "authSet", "authRemove"].map { CAPPluginMethod(name: $0, returnType: CAPPluginReturnPromise) }
+    public let pluginMethods: [CAPPluginMethod] = ["permission", "ensurePermission", "sync", "refreshActivity", "pendingActions", "acknowledge", "pendingNavigation", "acknowledgeNavigation", "authGet", "authSet", "authRemove"].map { CAPPluginMethod(name: $0, returnType: CAPPluginReturnPromise) }
 
     private func authQuery(_ call: CAPPluginCall) -> [String: Any]? {
         guard let key = call.getString("key"), key.hasPrefix("sb-"), key.contains("-auth-token") else {
@@ -74,6 +74,32 @@ public class NoteHubPlugin: CAPPlugin, CAPBridgedPlugin {
                 center.getNotificationSettings { call.resolve(["enabled": $0.authorizationStatus == .authorized || $0.authorizationStatus == .provisional]) }
             }
         } else { center.getNotificationSettings { call.resolve(["enabled": $0.authorizationStatus == .authorized || $0.authorizationStatus == .provisional]) } }
+    }
+    // iOS shows its own prompt only once; after a denial the user has to be sent to Settings.
+    private var settingsAlertShown = false
+    @objc func ensurePermission(_ call: CAPPluginCall) {
+        let center = UNUserNotificationCenter.current()
+        center.getNotificationSettings { settings in
+            switch settings.authorizationStatus {
+            case .notDetermined:
+                center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in call.resolve(["enabled": granted]) }
+            case .denied:
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, !self.settingsAlertShown, let presenter = self.bridge?.viewController, presenter.presentedViewController == nil else { call.resolve(["enabled": false]); return }
+                    self.settingsAlertShown = true
+                    let alert = UIAlertController(title: "Notificaciones desactivadas", message: "NoteHub no puede avisarte de tus recordatorios y eventos. Actívalas en Ajustes.", preferredStyle: .alert)
+                    alert.addAction(UIAlertAction(title: "Ahora no", style: .cancel) { _ in self.settingsAlertShown = false; call.resolve(["enabled": false]) })
+                    alert.addAction(UIAlertAction(title: "Abrir Ajustes", style: .default) { _ in
+                        self.settingsAlertShown = false
+                        if let url = URL(string: UIApplication.openNotificationSettingsURLString) { UIApplication.shared.open(url) }
+                        call.resolve(["enabled": false])
+                    })
+                    presenter.present(alert, animated: true)
+                }
+            default:
+                call.resolve(["enabled": true])
+            }
+        }
     }
     @objc func sync(_ call: CAPPluginCall) {
         guard let raw = call.getArray("items") else { call.reject("Datos de calendario inválidos"); return }

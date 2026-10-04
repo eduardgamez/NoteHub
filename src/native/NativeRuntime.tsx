@@ -40,14 +40,15 @@ export function NativeRuntime() {
       finally { running = false; }
     };
     const visible = () => { if (!document.hidden) void refresh(); };
-    const foreground = () => { syncedAt = 0; visible(); };
+    // Asks iOS while undecided, or offers Settings after a denial, every time the app comes to the front.
+    const askPermission = () => nativeBridge.ensurePermission().catch(() => undefined);
+    const foreground = () => { syncedAt = 0; if (!document.hidden) void askPermission().finally(visible); };
     const unsubscribe = useWorkspace.subscribe((state, previous) => { if (state.tasks !== previous.tasks || state.calendarEvents !== previous.calendarEvents) void refresh(); });
     document.addEventListener('visibilitychange', foreground);
     window.addEventListener('focus', foreground);
     const navigationListener = nativeBridge.addListener('notificationOpened', () => { void refresh(); });
     const timer = window.setInterval(visible, 5000);
-    // Without asking, iOS silently drops every scheduled notice. iOS only shows the prompt while permission is undecided.
-    void nativeBridge.permission({ request: true }).catch(() => undefined).finally(() => { syncedAt = 0; void refresh(); });
+    void askPermission().finally(() => { syncedAt = 0; void refresh(); });
     return () => { stopped = true; void navigationListener.then((listener) => listener.remove()).catch(() => {}); unsubscribe(); clearInterval(timer); document.removeEventListener('visibilitychange', foreground); window.removeEventListener('focus', foreground); };
   }, [hydrated]);
   return null;

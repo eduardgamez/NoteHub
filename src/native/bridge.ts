@@ -14,6 +14,7 @@ interface NativeBridge {
   acknowledgeNavigation(options: { id: string }): Promise<void>;
   addListener(event: 'notificationOpened', listener: () => void): Promise<PluginListenerHandle>;
   permission(options: { request: boolean }): Promise<{ enabled: boolean }>;
+  ensurePermission(): Promise<{ enabled: boolean }>;
   sync(options: { items: NativeItem[] }): Promise<{ scheduled: number }>;
   refreshActivity(): Promise<void>;
   pendingActions(): Promise<{ actions: NativeAction[] }>;
