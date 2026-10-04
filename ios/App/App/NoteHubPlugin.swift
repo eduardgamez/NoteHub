@@ -91,7 +91,9 @@ public class NoteHubPlugin: CAPPlugin, CAPBridgedPlugin {
                     alert.addAction(UIAlertAction(title: "Ahora no", style: .cancel) { _ in self.settingsAlertShown = false; call.resolve(["enabled": false]) })
                     alert.addAction(UIAlertAction(title: "Abrir Ajustes", style: .default) { _ in
                         self.settingsAlertShown = false
-                        if let url = URL(string: UIApplication.openNotificationSettingsURLString) { UIApplication.shared.open(url) }
+                        let target: String
+                        if #available(iOS 16.0, *) { target = UIApplication.openNotificationSettingsURLString } else { target = UIApplication.openSettingsURLString }
+                        if let url = URL(string: target) { UIApplication.shared.open(url) }
                         call.resolve(["enabled": false])
                     })
                     presenter.present(alert, animated: true)
