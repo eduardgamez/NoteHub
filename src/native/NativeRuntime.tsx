@@ -13,6 +13,7 @@ export function NativeRuntime() {
     let running = false, again = false, stopped = false;
     let lastSynced: Pick<ReturnType<typeof useWorkspace.getState>, 'tasks' | 'calendarEvents'> | undefined;
     let syncedAt = 0;
+    let permissionAsked = false;
     const refresh = async () => {
       if (running) { again = true; return; }
       running = true;
@@ -32,7 +33,13 @@ export function NativeRuntime() {
           }
           const state = useWorkspace.getState();
           if (!lastSynced || state.tasks !== lastSynced.tasks || state.calendarEvents !== lastSynced.calendarEvents || Date.now() - syncedAt > 15 * 60000) {
-            await nativeBridge.sync({ items: nativeItems(state.tasks, state.calendarEvents) });
+            const items = nativeItems(state.tasks, state.calendarEvents);
+            // Without asking, iOS silently drops every scheduled notice until the user finds the button in Settings.
+            if (!permissionAsked && items.some((item) => item.due > Date.now() / 1000)) {
+              permissionAsked = true;
+              await nativeBridge.permission({ request: true }).catch(() => undefined);
+            }
+            await nativeBridge.sync({ items });
             lastSynced = state; syncedAt = Date.now();
           } else { await nativeBridge.refreshActivity(); }
         } while (again && !stopped);

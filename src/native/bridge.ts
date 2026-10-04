@@ -20,14 +20,21 @@ interface NativeBridge {
   acknowledge(options: { ids: string[] }): Promise<void>;
 }
 export const nativeBridge = registerPlugin<NativeBridge>('NoteHubNative');
+// iOS decodes the whole list at once, so one malformed entry (synced from an older client) would cancel every notice.
+function nativeChecklist(checklist: unknown): ChecklistEntry[] {
+  return Array.isArray(checklist) ? checklist.filter((item) => item && typeof item.id === 'string').map((item) => ({ id: item.id, text: String(item.text ?? ''), done: item.done === true })) : [];
+}
 export function nativeItems(tasks: Task[], events: CalendarEvent[]): NativeItem[] {
   return [
     ...tasks.filter((task) => task.reminder && task.due).map((task): NativeItem => {
       const date = reminderDate(task.due!);
       if (isAllDayReminder(task)) date.setHours(9, 0, 0, 0);
-      return { id: `task:${task.id}`, title: task.title, kind: 'task', due: date.getTime() / 1000, checklist: task.checklist };
+      return { id: `task:${task.id}`, title: String(task.title ?? ''), kind: 'task', due: date.getTime() / 1000, checklist: nativeChecklist(task.checklist) };
     }),
-    ...events.map((event): NativeItem => ({ id: `event:${event.id}`, title: event.title, kind: 'event', due: new Date(event.start).getTime() / 1000, end: new Date(event.end).getTime() / 1000, checklist: event.checklist ?? [] })),
+    ...events.map((event): NativeItem => {
+      const end = new Date(event.end).getTime() / 1000;
+      return { id: `event:${event.id}`, title: String(event.title ?? ''), kind: 'event', due: new Date(event.start).getTime() / 1000, ...(Number.isFinite(end) ? { end } : {}), checklist: nativeChecklist(event.checklist) };
+    }),
   ].filter((item) => Number.isFinite(item.due));
 }
 export function apiUrl(path: string): string {

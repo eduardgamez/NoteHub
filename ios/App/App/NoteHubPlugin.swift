@@ -76,7 +76,11 @@ public class NoteHubPlugin: CAPPlugin, CAPBridgedPlugin {
         } else { center.getNotificationSettings { call.resolve(["enabled": $0.authorizationStatus == .authorized || $0.authorizationStatus == .provisional]) } }
     }
     @objc func sync(_ call: CAPPluginCall) {
-        guard let raw = call.getArray("items"), let data = try? JSONSerialization.data(withJSONObject: raw), let items = try? JSONDecoder().decode([ReminderItem].self, from: data) else { call.reject("Datos de calendario inválidos"); return }
+        guard let raw = call.getArray("items") else { call.reject("Datos de calendario inválidos"); return }
+        // Decode each entry separately: one malformed item must not cancel every other notice.
+        let items = raw.compactMap { entry in
+            (try? JSONSerialization.data(withJSONObject: entry)).flatMap { try? JSONDecoder().decode(ReminderItem.self, from: $0) }
+        }
         Task { @MainActor in
             // Native actions remain authoritative until the web has persisted and acknowledged them.
             var next = items
@@ -100,8 +104,16 @@ public class NoteHubPlugin: CAPPlugin, CAPBridgedPlugin {
                 for item in upcoming {
                     let content = ReminderStore.notificationContent(for: item)
                     let date = Date(timeIntervalSince1970: item.due)
-                    let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
-                    center.add(UNNotificationRequest(identifier: item.id, content: content, trigger: UNCalendarNotificationTrigger(dateMatching: components, repeats: false)))
+                    // Pin the time zone so the notice fires at the saved instant even after travelling or a zone change.
+                    let components = Calendar.current.dateComponents([.timeZone, .year, .month, .day, .hour, .minute, .second], from: date)
+                    center.add(UNNotificationRequest(identifier: item.id, content: content, trigger: UNCalendarNotificationTrigger(dateMatching: components, repeats: false))) { error in
+                        if let error { NSLog("NoteHub: could not schedule %@: %@", item.id, error.localizedDescription) }
+                    }
+                }
+                // Notices for items deleted elsewhere would otherwise linger in Notification Center and open nothing.
+                let known = Set(next.map(\.id))
+                center.getDeliveredNotifications { delivered in
+                    center.removeDeliveredNotifications(withIdentifiers: delivered.map(\.request.identifier).filter { ($0.hasPrefix("task:") || $0.hasPrefix("event:")) && !known.contains($0) })
                 }
                 call.resolve(["scheduled": upcoming.count])
             }

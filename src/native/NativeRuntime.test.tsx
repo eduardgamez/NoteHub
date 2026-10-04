@@ -13,6 +13,7 @@ vi.mock('./bridge', async () => {
     pendingActions: vi.fn().mockResolvedValue({ actions: [] }),
     pendingNavigation: vi.fn().mockResolvedValue(undefined),
     acknowledgeNavigation: vi.fn(),
+    permission: vi.fn().mockResolvedValue({ enabled: true }),
     sync: vi.fn().mockResolvedValue({ scheduled: 0 }),
     refreshActivity: vi.fn().mockResolvedValue(undefined),
     addListener: vi.fn().mockResolvedValue({ remove: vi.fn() }),
@@ -30,4 +31,18 @@ it('syncs the ongoing event even when iOS returns no pending notification naviga
   render(<NativeRuntime />);
   await waitFor(() => expect(nativeBridge.sync).toHaveBeenCalledWith({ items: [expect.objectContaining({ id: 'event:ongoing', title: 'Clase actual', end: expect.any(Number) })] }));
   expect(nativeBridge.acknowledgeNavigation).not.toHaveBeenCalled();
+});
+
+it('asks for notification permission before scheduling upcoming items', async () => {
+  const now = Date.now();
+  useWorkspace.setState({ calendarEvents: [{ id: 'next', title: 'Luego', start: new Date(now + 3600000).toISOString(), end: new Date(now + 7200000).toISOString(), color: 'green' }] });
+  render(<NativeRuntime />);
+  await waitFor(() => expect(nativeBridge.sync).toHaveBeenCalled());
+  expect(nativeBridge.permission).toHaveBeenCalledWith({ request: true });
+});
+
+it('does not prompt for permission when nothing is upcoming', async () => {
+  render(<NativeRuntime />);
+  await waitFor(() => expect(nativeBridge.sync).toHaveBeenCalled());
+  expect(nativeBridge.permission).not.toHaveBeenCalled();
 });

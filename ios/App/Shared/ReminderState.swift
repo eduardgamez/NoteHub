@@ -69,7 +69,9 @@ struct ReminderAttributes: ActivityAttributes {
     }
     nonisolated static func notificationContent(for item: ReminderItem) -> UNMutableNotificationContent {
         let content = UNMutableNotificationContent()
-        content.title = item.title
+        // iOS does not show a notice with neither title nor body.
+        let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        content.title = title.isEmpty ? (item.kind == "event" ? "Evento" : "Recordatorio") : item.title
         content.sound = .default
         content.userInfo = ["targetId": item.id, "due": item.due]
         if item.kind == "event" {
