@@ -82,6 +82,9 @@ describe('drop target geometry', () => {
     const columns = [rect('left', 'row', 0, 0, 300, 200), rect('right', 'row', 314, 0, 600, 120), rect('below', 'below', 0, 300, 600, 400)];
     expect(findBlockDrop(columns, 400, 206)).toEqual({ targetId: 'right', side: false, before: false, row: true });
     expect(findBlockDrop(columns, 400, 150)).toEqual({ targetId: 'right', side: false, before: false, row: false });
+    expect(findBlockDrop(columns, 590, 150)).toEqual({ targetId: 'right', side: true, before: false, row: false });
+    const short = [rect('above', 'above', 0, 0, 700, 100), rect('text', 'text', 0, 114, 700, 150)];
+    expect(findBlockDrop(short, 600, 120)).toEqual({ targetId: 'text', side: true, before: false, row: false });
     expect(findBlockDrop(candidates, NaN, 0)).toBeNull();
   });
 });

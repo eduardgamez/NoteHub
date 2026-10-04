@@ -21,7 +21,7 @@ const columnMinWidth = (blocks: CanvasBlock[], rowWidth: number) => Math.min(row
 export function CanvasWorkspace() {
   const pageRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLInputElement>(null);
-  const dragRef = useRef<{ blockId: string; startX: number; startY: number; clientX: number; clientY: number; targetId?: string; before?: boolean; side?: boolean; row?: boolean } | null>(null);
+  const dragRef = useRef<{ blockId: string; startX: number; startY: number; clientX: number; clientY: number; grabOffset: number; targetId?: string; before?: boolean; side?: boolean; row?: boolean } | null>(null);
   const marqueeRef = useRef<{ pointerId: number; start: Point; dragging: boolean } | null>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const inkMoveRef = useRef<{ pointerId: number; startX: number; startY: number; ids: string[] } | null>(null);
@@ -170,7 +170,10 @@ export function CanvasWorkspace() {
     requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('.ai-panel .ai-composer textarea')?.focus());
   }, [setAiOpen, setAiTextSelection]);
   const startReorder = useCallback((blockId: string, clientX: number, clientY: number) => {
-    dragRef.current = { blockId, startX: clientX, startY: clientY, clientX, clientY };
+    // The move handle floats above the block, so the pointer sits over the gap
+    // or the row above. Aim with the block's top edge instead of the handle.
+    const top = pageRef.current?.querySelector<HTMLElement>(`[data-block-id="${CSS.escape(blockId)}"]`)?.getBoundingClientRect().top;
+    dragRef.current = { blockId, startX: clientX, startY: clientY, clientX, clientY, grabOffset: top === undefined ? 0 : Math.max(0, top - clientY) };
   }, []);
   const moveReorder = useCallback((blockId: string, clientX: number, clientY: number) => {
     const drag = dragRef.current;
@@ -187,7 +190,7 @@ export function CanvasWorkspace() {
       const rect = element.getBoundingClientRect();
       return { id: element.dataset.blockId!, rowId: element.closest<HTMLElement>('.document-block-row')!.dataset.rowId!, title: element.classList.contains('title-block'), drawing: element.classList.contains('type-drawing'), left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
     });
-    const drop = findBlockDrop(candidates.filter((item) => item.id !== blockId), clientX, clientY);
+    const drop = findBlockDrop(candidates.filter((item) => item.id !== blockId), clientX, clientY + drag.grabOffset);
     if (!drop) { setDropTarget(null); drag.targetId = undefined; return; }
     drag.targetId = drop.targetId;
     drag.before = drop.before;

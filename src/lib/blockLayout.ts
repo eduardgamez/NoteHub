@@ -129,7 +129,9 @@ export function findBlockDrop(candidates: DropBlock[], x: number, y: number) {
     const nextX = gap(x, next.left, next.right), bestX = gap(x, best.left, best.right);
     return nextX < bestX || (nextX === bestX && gap(y, next.top, next.bottom) < gap(y, best.top, best.bottom)) ? next : best;
   });
-  const zone = target.drawing ? .38 : .24;
-  const side = !target.title && y >= target.top && y <= target.bottom && (x < target.left + (target.right - target.left) * zone || x > target.right - (target.right - target.left) * zone);
+  const zone = target.drawing ? .38 : .3;
+  // Anywhere level with the row counts as beside, so the free space next to a
+  // short column or a short text block is a valid side drop.
+  const side = !target.title && y >= row.top && y <= row.bottom && (x < target.left + (target.right - target.left) * zone || x > target.right - (target.right - target.left) * zone);
   return { targetId: target.id, side, before: target.title ? false : side ? x < (target.left + target.right) / 2 : y < (target.top + target.bottom) / 2, row: false };
 }
