@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { FileText, Laptop, Moon, Search, Settings, Sun, X } from 'lucide-react';
-import { useWorkspace } from '../store/useWorkspace';
+import { aiOpensByDefault, useWorkspace } from '../store/useWorkspace';
 import { useTheme } from '../hooks/useTheme';
 
 export function AppHeader() {
@@ -31,7 +31,7 @@ export function AppHeader() {
   return <header className="app-header">
     <button className="header-brand" onClick={() => { setActiveView('calendar'); setAiOpen(false); }} aria-label="NoteHub home"><span className="brand-mark">N</span><strong>NoteHub</strong></button>
     <div ref={searchRef} className="header-search"><Search size={17} /><input type="search" aria-label="Search in notes" placeholder="Search in notes…" value={query} onFocus={() => setSearchOpen(true)} onChange={(event) => { setQuery(event.target.value); setSearchOpen(true); }} />{query && <button aria-label="Clear search" onClick={() => setQuery('')}><X size={14} /></button>}
-      {searchOpen && query.trim() && <div className="header-search-results">{results.length ? results.map((note) => <button key={note.id} onClick={() => { setActiveNote(note.id); setAiOpen(window.innerWidth > 820); setQuery(''); setSearchOpen(false); }}><span>{note.emoji}</span><span>{note.title}</span></button>) : <p>No notes found</p>}</div>}
+      {searchOpen && query.trim() && <div className="header-search-results">{results.length ? results.map((note) => <button key={note.id} onClick={() => { setActiveNote(note.id); setAiOpen(aiOpensByDefault()); setQuery(''); setSearchOpen(false); }}><span>{note.emoji}</span><span>{note.title}</span></button>) : <p>No notes found</p>}</div>}
     </div>
     <div className="header-actions">
       <button onClick={() => setActiveView('settings')} aria-label="Settings" title="Settings"><Settings size={20} /></button>

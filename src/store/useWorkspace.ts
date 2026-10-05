@@ -147,6 +147,10 @@ export const workspaceDataFrom = (state: WorkspaceStore): WorkspaceStateData => 
   personalProfile: state.personalProfile,
 });
 
+// iPad and phones start with the AI chat closed; only wide pointer screens open it by default.
+const isTouchDevice = () => typeof window.matchMedia === 'function' && window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+export const aiOpensByDefault = () => window.innerWidth > 820 && !isTouchDevice();
+
 function persist(state: WorkspaceStore) { scheduleSave(workspaceDataFrom(state)); }
 
 function migrate(stored: Partial<WorkspaceStateData>): WorkspaceStateData {
@@ -231,7 +235,7 @@ export const useWorkspace = create<WorkspaceStore>((set, get) => ({
   openProject(id) {
     if (id === 'gym') { set({ activeProjectId: id, activeView: 'gym', selectedIds: [], activeBlockId: null, aiTextSelection: null }); return; }
     const first = Object.values(get().notes).find((note) => note.projectId === id);
-    set({ activeProjectId: id, activeNoteId: first?.id ?? get().activeNoteId, activeView: first ? 'note' : 'project', aiOpen: window.innerWidth > 820, sidebarOpen: window.innerWidth > 820, selectedIds: [], activeBlockId: null, aiTextSelection: null });
+    set({ activeProjectId: id, activeNoteId: first?.id ?? get().activeNoteId, activeView: first ? 'note' : 'project', aiOpen: aiOpensByDefault(), sidebarOpen: window.innerWidth > 820, selectedIds: [], activeBlockId: null, aiTextSelection: null });
   },
   addProject(project) { set((state) => ({ projects: [...state.projects, project] })); persist(get()); syncEngine.publish({ kind: 'project.upsert', project }); },
   updateProject(project) { set((state) => ({ projects: state.projects.map((item) => item.id === project.id ? project : item) })); persist(get()); syncEngine.publish({ kind: 'project.upsert', project }); },

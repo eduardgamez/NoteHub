@@ -6,5 +6,5 @@ export function Topbar() {
   const setSidebarOpen = useWorkspace((state) => state.setSidebarOpen);
 
   if (sidebarOpen) return null;
-  return <button type="button" className="project-sidebar-toggle" onClick={() => setSidebarOpen(true)} aria-label="Open project explorer" title="Open project explorer"><Files size={18} /></button>;
+  return <button type="button" className="project-sidebar-toggle" onClick={() => setSidebarOpen(true)} aria-label="Open project explorer" title="Open project explorer"><Files size={20} /></button>;
 }

@@ -9,7 +9,7 @@ import type { SyncOperation } from '../sync/syncEngine';
 vi.mock('../lib/storage', () => ({ loadWorkspace: vi.fn(), preserveWorkspace: vi.fn().mockResolvedValue(undefined), scheduleSave: vi.fn() }));
 vi.mock('../sync/syncEngine', () => ({ syncEngine: { publish: vi.fn(), subscribe: vi.fn() } }));
 
-import { useWorkspace } from './useWorkspace';
+import { aiOpensByDefault, useWorkspace } from './useWorkspace';
 
 describe('workspace hydration across devices', () => {
   it('starts with a blank chat while preserving history for explicit selection', async () => {
@@ -250,6 +250,18 @@ describe('mobile project panels', () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });
     useWorkspace.getState().setSidebarOpen(true);
     expect(useWorkspace.getState()).toMatchObject({ sidebarOpen: true, aiOpen: true });
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
+  });
+
+  it('keeps the AI chat closed by default on touch tablets but opens it on wide desktops', () => {
+    const width = window.innerWidth;
+    const matchMedia = window.matchMedia;
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1180 });
+    window.matchMedia = ((query: string) => ({ matches: query.includes('pointer: coarse') })) as unknown as typeof window.matchMedia;
+    expect(aiOpensByDefault()).toBe(false);
+    window.matchMedia = ((query: string) => ({ matches: !query })) as unknown as typeof window.matchMedia;
+    expect(aiOpensByDefault()).toBe(true);
+    window.matchMedia = matchMedia;
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
   });
 });

@@ -109,7 +109,7 @@ export function Sidebar() {
     showMenu('blank', undefined, event.clientX + 6, event.clientY);
   }}>
     <div className="project-sidebar-heading"><button aria-label="Back to home" onClick={() => { setActiveView('calendar'); setAiOpen(false); }}><ArrowLeft size={19} /></button><strong>PROJECTS</strong><button type="button" className="project-sidebar-close" aria-label="Close project explorer" title="Close project explorer" onClick={() => setSidebarOpen(false)}><X size={17} /></button></div>
-    {project ? <div className="project-tree"><div className="project-tree-root"><span>{project.emoji}</span><strong>{project.title}</strong></div>
+    {project ? <div className="project-tree"><div className="project-tree-root"><span>{project.emoji}</span><strong>{project.title}</strong><button type="button" aria-label="New folder" title="New folder" onClick={() => startCreate('folder')}><FolderPlus size={16} /></button><button type="button" aria-label="New document" title="New document" onClick={() => startCreate('note')}><FilePlus2 size={16} /></button></div>
       <div className="project-tree-children">{folders.filter((folder) => !folder.parentId || !folders.some((parent) => parent.id === folder.parentId)).map(folderRow)}{notes.filter((note) => !note.folderId || !folders.some((folder) => folder.id === note.folderId)).map(noteRow)}{newItem()}</div>
     </div> : <p className="project-tree-empty">Project not found.</p>}
     {menu && createPortal(<div ref={menuRef} className="project-context-menu" role="menu" aria-label="Project item options" style={{ left: menu.x, top: menu.y }}>
