@@ -25,3 +25,17 @@ it('keeps the caret when tapping a button such as the formatting tools', () => {
   tap(document.getElementById('icon')!);
   expect(document.activeElement).toBe(block);
 });
+it('stops the browser from snapping the caret back into the text when clicking empty page space', () => {
+  document.body.innerHTML = '<div id="block" contenteditable="true">Hola</div><div id="page"></div>';
+  stop = watchOutsideTapBlur();
+  const block = document.getElementById('block')!;
+  block.focus();
+  const page = document.getElementById('page')!;
+  tap(page);
+  const mousedown = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+  page.dispatchEvent(mousedown);
+  expect(mousedown.defaultPrevented).toBe(true);
+  block.focus();
+  page.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  expect(document.activeElement).not.toBe(block);
+});
