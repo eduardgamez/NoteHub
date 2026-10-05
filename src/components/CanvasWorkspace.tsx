@@ -73,8 +73,10 @@ export function CanvasWorkspace() {
     if (tool !== 'ink' && tool !== 'eraser') return;
     const viewport = viewportRef.current;
     if (!viewport) return;
+    // While the pen is on the page nothing scrolls, so a resting palm cannot
+    // drag the page under the stroke.
     const stopStylusScroll = (event: TouchEvent) => {
-      if (Array.from(event.changedTouches).some((touch) => (touch as Touch & { touchType?: string }).touchType === 'stylus')) event.preventDefault();
+      if ([...Array.from(event.touches), ...Array.from(event.changedTouches)].some((touch) => (touch as Touch & { touchType?: string }).touchType === 'stylus')) event.preventDefault();
     };
     viewport.addEventListener('touchstart', stopStylusScroll, { passive: false });
     viewport.addEventListener('touchmove', stopStylusScroll, { passive: false });

@@ -242,7 +242,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, [contentedita
 .image-block figcaption { height: 35px; flex: none; padding: 9px 12px; overflow: hidden; color: var(--muted); font-size: 10px; }
 .image-block figcaption[contenteditable] { height: auto; min-height: 35px; overflow-wrap: anywhere; }
 .image-block figcaption pre { margin: 0; white-space: pre-wrap; }
-.ink-layer { position: absolute; inset: 0; pointer-events: none; touch-action: none; overflow: visible; }
+.ink-layer { position: absolute; inset: 0; pointer-events: none; touch-action: none; overflow: visible; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .ink-layer.active { pointer-events: auto; }
 .document-mode .ink-layer.active { touch-action: pan-x pan-y; }
 .ink-layer.eraser { cursor: cell; }
@@ -295,7 +295,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, [contentedita
 .document-mode .drawing-space { min-height: 0; }
 .document-mode .ink-layer { z-index: 2; width: 100%; height: 100%; }
 .tool-ink .ink-layer.active { cursor: crosshair; }
-.tool-ink .document-page, .tool-ink .document-page * { caret-color: transparent; user-select: none; -webkit-user-select: none; }
+.tool-ink .document-page, .tool-ink .document-page *, .tool-eraser .document-page, .tool-eraser .document-page * { caret-color: transparent; user-select: none; -webkit-user-select: none; }
 .ink-selection-marquee, .ink-selection-box { position: absolute; z-index: 5; box-sizing: border-box; pointer-events: none; }
 .ink-selection-marquee { border: 1px dashed var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent); }
 .ink-selection-box { border: 1px solid var(--accent); border-radius: 3px; background: color-mix(in srgb, var(--accent) 4%, transparent); }
