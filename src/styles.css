@@ -1104,13 +1104,15 @@ html:has(.home-layout), body:has(.home-layout),
 .gym-secondary .gym-link { color: var(--muted); }
 @media(max-width:700px) { .gym-routine-row { gap: 10px; padding: 16px 0; } .gym-routine-row h2 { font-size: 18px; } .gym-routine-row .gym-primary { padding: 9px 11px; } .gym-routine-row .gym-inline { gap: 5px; } }
 
-/* Keep iPhone form text readable without WebKit zooming the page on focus. */
+/* Keep iPhone form text readable without WebKit zooming the page on focus.
+   Document text keeps its own size so lines are spaced exactly as on desktop
+   (the native viewport already blocks focus zoom). */
 @media (max-width: 700px) {
-  .native-ios input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not(.project-title-input):not(.gym-session-head input):not(.gym-routine-editor .gym-section-title > input),
-  .native-ios textarea,
+  .native-ios input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not(.project-title-input):not(.gym-session-head input):not(.gym-routine-editor .gym-section-title > input):not(.document-page *),
+  .native-ios textarea:not(.document-page *),
   .native-ios select,
-  .native-ios [contenteditable='true'],
-  .native-ios [contenteditable='plaintext-only'] {
+  .native-ios [contenteditable='true']:not(.document-page *),
+  .native-ios [contenteditable='plaintext-only']:not(.document-page *) {
     font-size: max(16px, 1em) !important;
   }
   .native-ios .project-title-input { font-size: 16px; }

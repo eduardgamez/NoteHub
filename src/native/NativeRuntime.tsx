@@ -10,6 +10,9 @@ export function NativeRuntime() {
   useEffect(() => {
     if (!hydrated || !isNativeIOS()) return;
     document.documentElement.classList.add('native-ios');
+    // The app zooms documents itself; stop WebKit zooming the whole view when a small-text field gets focus.
+    const viewport = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
+    if (viewport && !/maximum-scale/.test(viewport.content)) viewport.content += ', maximum-scale=1';
     let running = false, again = false, stopped = false;
     let lastSynced: Pick<ReturnType<typeof useWorkspace.getState>, 'tasks' | 'calendarEvents'> | undefined;
     let syncedAt = 0;
