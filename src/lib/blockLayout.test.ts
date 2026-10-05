@@ -82,7 +82,13 @@ describe('drop target geometry', () => {
     const columns = [rect('left', 'row', 0, 0, 300, 200), rect('right', 'row', 314, 0, 600, 120), rect('below', 'below', 0, 300, 600, 400)];
     expect(findBlockDrop(columns, 400, 206)).toEqual({ targetId: 'right', side: false, before: false, row: true });
     expect(findBlockDrop(columns, 400, 150)).toEqual({ targetId: 'right', side: false, before: false, row: false });
-    expect(findBlockDrop(columns, 590, 150)).toEqual({ targetId: 'right', side: true, before: false, row: false });
+    expect(findBlockDrop(columns, 590, 150)).toEqual({ targetId: 'right', side: false, before: false, row: false });
+    expect(findBlockDrop(columns, 590, 100)).toEqual({ targetId: 'right', side: true, before: false, row: false });
+    // Table and drawing on the left, text and short code on the right: the
+    // empty corner under the code stacks there instead of opening a column.
+    const corner = [rect('table', 'r', 0, 0, 500, 260), rect('drawing', 'r', 0, 280, 500, 700, true), rect('text', 'r', 514, 0, 1000, 120), rect('code', 'r', 514, 134, 1000, 400)];
+    expect(findBlockDrop(corner, 530, 500)).toEqual({ targetId: 'code', side: false, before: false, row: false });
+    expect(findBlockDrop(corner, 980, 600)).toEqual({ targetId: 'code', side: false, before: false, row: false });
     const short = [rect('above', 'above', 0, 0, 700, 100), rect('text', 'text', 0, 114, 700, 150)];
     expect(findBlockDrop(short, 600, 120)).toEqual({ targetId: 'text', side: true, before: false, row: false });
     expect(findBlockDrop(candidates, NaN, 0)).toBeNull();
