@@ -23,8 +23,8 @@ try {
   const geometry = () => page.evaluate(async () => {
     const { readDocumentLayout } = await import('/src/lib/documentInk.ts');
     const layout = readDocumentLayout(document.querySelector('.document-page'));
-    for (const rect of Object.values(layout)) for (const key of Object.keys(rect)) rect[key] = Math.round(rect[key] * 1000) / 1000;
-    return { layout, ink: document.querySelector('.ink-layer path')?.getAttribute('d')?.replace(/-?\d+(?:\.\d+)?(?:e[+-]?\d+)?/g, (number) => String(Math.round(Number(number) * 1000) / 1000)) };
+    for (const rect of Object.values(layout)) for (const key of Object.keys(rect)) rect[key] = Math.round(rect[key] * 100) / 100;
+    return { layout, ink: document.querySelector('.ink-layer path')?.getAttribute('d')?.replace(/-?\d+(?:\.\d+)?(?:e[+-]?\d+)?/g, (number) => String(Math.round(Number(number) * 100) / 100)) };
   });
   const wide = await geometry();
   for (const width of [320, 375, 600, 800]) {

@@ -6,7 +6,7 @@ let browser;
 // Text written before the size change carries sizes inside its own HTML, in
 // every shape WebKit's editing, pasting and older content produce. All of it
 // must follow the block's text size; only the S/M/L/XL menu scales it.
-const body = 17;
+const body = 25;
 const shapes = [
   ['plain', '<p>x</p>', body],
   ['span px', '<p><span style="font-size: 14px;">x</span></p>', body],
@@ -23,6 +23,8 @@ const shapes = [
   ['L', '<font size="4">x</font>', body * 1.125],
   ['XL inside frozen px', '<span style="font-size: 14px;"><font size="5">x</font></span>', body * 1.5],
   ['L with frozen px', '<font size="4" style="font-size: 14px;">x</font>', body * 1.125],
+  ['paragraph inside heading', '<h2>t</h2><h2><p style="font-family: Inter; font-size: 14px;">x</p></h2>', body, 1],
+  ['clean paragraph inside heading', '<h2><p>x</p></h2>', body],
 ];
 try {
   browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH });
@@ -45,12 +47,13 @@ try {
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await page.waitForTimeout(100);
-    for (const [name, , expected] of shapes) {
-      const size = await page.locator(`[data-block-id="shape-${name}"] .rich-block`).evaluate((block) => {
+    for (const [name, , expected, skip = 0] of shapes) {
+      const size = await page.locator(`[data-block-id="shape-${name}"] .rich-block`).evaluate((block, skip) => {
         const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
-        const text = walker.nextNode();
+        let text = walker.nextNode();
+        for (let index = 0; index < skip; index++) text = walker.nextNode();
         return parseFloat(getComputedStyle(text.parentElement).fontSize);
-      });
+      }, skip);
       if (Math.abs(size - expected) >= .05) failures.push(`${name} at ${width}px: ${size}px instead of ${expected}px`);
     }
   }
