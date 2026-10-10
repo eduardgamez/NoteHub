@@ -13,6 +13,9 @@ export function NativeRuntime() {
     // The app zooms documents itself; stop WebKit zooming the whole view when a small-text field gets focus.
     const viewport = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
     if (viewport && !/maximum-scale/.test(viewport.content)) viewport.content += ', maximum-scale=1';
+    // With the keyboard up the home-indicator margin only adds an empty strip between the field and the keyboard.
+    const keyboardChanged = (event: Event) => { document.documentElement.classList.toggle('keyboard-open', (event as CustomEvent<{ height: number }>).detail.height > 0); };
+    window.addEventListener('notehub-keyboard', keyboardChanged);
     let running = false, again = false, stopped = false;
     let lastSynced: Pick<ReturnType<typeof useWorkspace.getState>, 'tasks' | 'calendarEvents'> | undefined;
     let syncedAt = 0;
@@ -53,7 +56,7 @@ export function NativeRuntime() {
     const permissionListener = nativeBridge.addListener('permissionChanged', foreground);
     const timer = window.setInterval(visible, 5000);
     void refresh();
-    return () => { stopped = true; for (const handle of [navigationListener, actionsListener, permissionListener]) void handle.then((listener) => listener.remove()).catch(() => {}); unsubscribe(); clearInterval(timer); document.removeEventListener('visibilitychange', foreground); window.removeEventListener('focus', foreground); };
+    return () => { stopped = true; for (const handle of [navigationListener, actionsListener, permissionListener]) void handle.then((listener) => listener.remove()).catch(() => {}); unsubscribe(); clearInterval(timer); window.removeEventListener('notehub-keyboard', keyboardChanged); document.documentElement.classList.remove('keyboard-open'); document.removeEventListener('visibilitychange', foreground); window.removeEventListener('focus', foreground); };
   }, [hydrated]);
   return null;
 }

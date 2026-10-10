@@ -1010,6 +1010,8 @@ html:has(.home-layout), body:has(.home-layout),
 
 .native-ios .app-frame { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
 .native-ios .modal-backdrop { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+/* The keyboard already covers the home indicator; the document keeps its own keyboard handling. */
+.native-ios.keyboard-open .app-frame:not(:has(.document-page :focus)), .native-ios.keyboard-open .modal-backdrop { padding-bottom: 0; }
 /* Blurring the whole calendar behind the sheet stutters while the iPhone keyboard slides in. */
 .native-ios .modal-backdrop { backdrop-filter: none; -webkit-backdrop-filter: none; }
 .native-ios .home-chat-toolbar .ai-chat-title strong { font-size: 18px; }

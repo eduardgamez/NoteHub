@@ -203,10 +203,27 @@ class NoteHubViewController: CAPBridgeViewController {
 
     override func capacitorDidLoad() {
         bridge?.registerPluginInstance(NoteHubPlugin())
+        hideFormAccessoryBar()
         offsetObservation = webView?.scrollView.observe(\.contentOffset) { scrollView, _ in
             if NoteHubViewController.keepsPagePinned && scrollView.contentOffset != .zero { scrollView.contentOffset = .zero }
         }
         NotificationCenter.default.addObserver(self, selector: #selector(keyboardWillChangeFrame(_:)), name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
+    }
+
+    // The ^ v ✓ bar WebKit puts above the keyboard only pushes the field away from it.
+    private func hideFormAccessoryBar() {
+        guard let content = webView?.scrollView.subviews.first(where: { String(describing: type(of: $0)).hasPrefix("WKContent") }) else { return }
+        let base: AnyClass = type(of: content)
+        let name = "\(NSStringFromClass(base))_NoteHubNoAccessory"
+        if base == NSClassFromString(name) { return }
+        var subclass: AnyClass? = NSClassFromString(name)
+        if subclass == nil, let created = objc_allocateClassPair(base, name, 0), let method = class_getInstanceMethod(UIView.self, #selector(getter: UIResponder.inputAccessoryView)) {
+            let noBar: @convention(block) (AnyObject) -> UIView? = { _ in nil }
+            class_addMethod(created, #selector(getter: UIResponder.inputAccessoryView), imp_implementationWithBlock(noBar), method_getTypeEncoding(method))
+            objc_registerClassPair(created)
+            subclass = created
+        }
+        if let subclass { object_setClass(content, subclass) }
     }
 
     @objc private func keyboardWillChangeFrame(_ notification: Notification) {
