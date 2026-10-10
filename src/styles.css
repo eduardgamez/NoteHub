@@ -202,6 +202,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, [contentedita
    <p> or a <div> depending on where the caret was (iPhone notes often end up
    with <p>), so both get the same spacing on every device. */
 .rich-block p { margin: 0; }
+/* Every Enter, in any block, moves down exactly one line: lines from Enter
+   (p, div, br, list items, inline code) get no extra margins, and all
+   editable text shares one line height. */
+.rich-block :is(div, pre, ul, ol) { margin-top: 0; margin-bottom: 0; }
+:is(.rich-block, .checklist-item span[contenteditable], .table-cell-editor, .image-block figcaption, .code-block pre) { line-height: 1.55; }
 .rich-block pre { max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; }
 .eyebrow { margin: 0 0 10px !important; color: #85857e; font-size: 8.5px !important; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; }
 .rich-block mark { padding: 1px 4px; border-radius: 3px; background: #f2e9b9; color: inherit; }
@@ -304,7 +309,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, [contentedita
 .document-mode .image-block figcaption { font-size: 21px; }
 /* Paragraphs that editing left inside a heading read as normal text, not as
    part of the heading. */
-.document-mode .document-page .rich-block :is(h1, h2, h3, h4, h5, h6) :is(p, div, ul, ol, pre) { margin: 0 0 11px; font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: var(--block-text) !important; font-weight: 400; line-height: 1.55; letter-spacing: normal; }
+.document-mode .document-page .rich-block :is(h1, h2, h3, h4, h5, h6) :is(p, div, ul, ol, pre) { margin: 0; font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: var(--block-text) !important; font-weight: 400; line-height: 1.55; letter-spacing: normal; }
 /* Text already written keeps following the default size. Editing, pasting
    and older content freeze sizes into the HTML itself (font-size: 14px on a
    span, div or <font color>, the font: shorthand, any casing), so all of
