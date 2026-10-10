@@ -1,11 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { documentPageWidth, documentPoint, documentRowWidth, fitDocumentScale, readDocumentLayout } from './documentInk';
+import { documentPageWidth, documentPoint, documentRowWidth, documentSideCrop, fitDocumentScale, readDocumentLayout } from './documentInk';
 
 describe('uniform document scaling', () => {
   it('fits the same canonical page for every column layout', () => {
-    expect(fitDocumentScale(340)).toBe(.4);
+    expect(fitDocumentScale(340)).toBeCloseTo(336 / 734);
+    expect(fitDocumentScale(700)).toBe(700 / 850);
     expect(fitDocumentScale(1200)).toBe(1);
     expect(fitDocumentScale(0)).toBe(1);
+  });
+
+  it('trims the page margins off screen on a phone', () => {
+    const scale = fitDocumentScale(340);
+    expect(documentSideCrop(340, scale)).toBeCloseTo(58 * scale - 2);
+    expect(850 * scale - 2 * documentSideCrop(340, scale)).toBeCloseTo(340);
+    expect(documentSideCrop(700, fitDocumentScale(700))).toBe(0);
   });
 
   it('widens rows with three or more columns instead of zooming text', () => {

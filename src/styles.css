@@ -284,6 +284,14 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, [contentedita
 .document-mode .canvas-block.type-drawing:hover .resize-handle, .document-mode .canvas-block.type-drawing.selected .resize-handle, .document-mode .canvas-block.type-drawing.active-block .resize-handle { opacity: 1; }
 .document-mode .block-chrome { left: auto; right: 2px; top: -25px; }
 .document-mode .rich-block { height: auto; min-height: 42px; padding: 10px 12px; overflow: visible; }
+/* Default document text, one size for every screen: the page is zoomed as a
+   whole, so text keeps the same proportion to blocks and ink everywhere. */
+.document-mode .rich-block { font-size: 16px; }
+.document-mode .checklist-item { font-size: 14px; }
+.document-mode .add-item { font-size: 12px; }
+.document-mode .table-cell-editor, .document-mode .table-block input { font-size: 13px; }
+.document-mode .code-block pre { font-size: 12.5px; }
+.document-mode .image-block figcaption { font-size: 12px; }
 .document-mode .title-block .rich-block { min-height: 52px; padding-top: 0; padding-bottom: 0; color: var(--text); font-family: Georgia, 'Times New Roman', serif; font-size: 38px; line-height: 1.18; }
 .document-mode .title-block .rich-block h1 { margin: 0; color: var(--text); font-size: 38px; line-height: 1.18; }
 .document-mode .code-block { height: auto; }

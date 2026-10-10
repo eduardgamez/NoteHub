@@ -9,7 +9,7 @@ import { blockRows, findBlockDrop } from '../lib/blockLayout';
 import { BlockCard } from './BlockCard';
 import { CanvasToolbar } from './CanvasToolbar';
 import { InkLayer } from './InkLayer';
-import { documentPageWidth, documentPoint, documentRowWidth, fitDocumentScale, projectStroke, readDocumentLayout, strokeIntersectsRect, type DocumentLayout, type DocumentRect } from '../lib/documentInk';
+import { documentPageWidth, documentPoint, documentRowWidth, documentSideCrop, fitDocumentScale, projectStroke, readDocumentLayout, strokeIntersectsRect, type DocumentLayout, type DocumentRect } from '../lib/documentInk';
 
 function selectionRect(start: Point, end: Point): DocumentRect {
   return { x: Math.min(start.x, end.x), y: Math.min(start.y, end.y), width: Math.abs(end.x - start.x), height: Math.abs(end.y - start.y) };
@@ -42,7 +42,9 @@ export function CanvasWorkspace() {
   });
   const pageWidth = documentPageWidth(rows.map((row) => row.width));
   const documentZoom = fitDocumentScale(availableWidth);
-  const documentFitted = documentZoom * pageWidth <= availableWidth + 1;
+  const sideCrop = documentSideCrop(availableWidth, documentZoom);
+  const frameWidth = pageWidth * documentZoom - 2 * sideCrop;
+  const documentFitted = frameWidth <= availableWidth + 1;
   const selectedIds = useWorkspace((state) => state.selectedIds);
   const activeBlockId = useWorkspace((state) => state.activeBlockId);
   const setActiveBlockId = useWorkspace((state) => state.setActiveBlockId);
@@ -283,8 +285,8 @@ export function CanvasWorkspace() {
       setMarquee(null);
       if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     }}>
-      <div className="document-page-frame" style={{ width: pageWidth * documentZoom, height: pageHeight ? pageHeight * documentZoom : undefined }}>
-      <article ref={pageRef} className="document-page" style={{ width: pageWidth, minWidth: pageWidth, maxWidth: pageWidth, transform: `scale(${documentZoom})` }}>
+      <div className="document-page-frame" style={{ width: frameWidth, height: pageHeight ? pageHeight * documentZoom : undefined }}>
+      <article ref={pageRef} className="document-page" style={{ width: pageWidth, minWidth: pageWidth, maxWidth: pageWidth, marginLeft: -sideCrop, transform: `scale(${documentZoom})` }}>
         <div className="document-blocks">
           {rows.map((row) => {
             const rowDrop = dropTarget?.row && row.columns.some((column) => column.blocks.some((block) => block.id === dropTarget.targetId)) ? dropTarget.before ? 'drop-row-before' : 'drop-row-after' : '';

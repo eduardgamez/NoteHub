@@ -49,8 +49,20 @@ export function documentPageWidth(rowWidths: number[]): number {
   return Math.max(DOCUMENT_CONTENT_WIDTH, ...rowWidths) + 2 * DOCUMENT_PADDING;
 }
 
+// On a phone the page's side margins are trimmed off screen so the blocks
+// reach almost to the window edge. Only the view is cropped: the page keeps its
+// width, so text wraps and ink sits exactly as on every other screen.
+export const PHONE_DOCUMENT_WIDTH = 600;
+const PHONE_EDGE = 2;
+
+export function documentSideCrop(availableWidth: number, scale: number): number {
+  return availableWidth > 0 && availableWidth < PHONE_DOCUMENT_WIDTH ? Math.max(0, DOCUMENT_PADDING * scale - PHONE_EDGE) : 0;
+}
+
 export function fitDocumentScale(availableWidth: number): number {
-  return availableWidth <= 0 ? 1 : Math.min(1, availableWidth / DOCUMENT_WIDTH);
+  if (availableWidth <= 0) return 1;
+  if (availableWidth < PHONE_DOCUMENT_WIDTH) return Math.min(1, (availableWidth - 2 * PHONE_EDGE) / DOCUMENT_CONTENT_WIDTH);
+  return Math.min(1, availableWidth / DOCUMENT_WIDTH);
 }
 
 export function readDocumentScale(page: HTMLElement): number {
