@@ -403,7 +403,7 @@ export function AIChat({ global = false, compact = false, home = false }: AIChat
         <div className="ai-chat-toolbar-actions">
         <button type="button" title="Chat history" aria-label="Chat history" aria-expanded={historyOpen} onClick={() => { setHistoryOpen(!historyOpen); setModelMenuOpen(false); }}><Clock3 size={17} /></button>
         <button type="button" title="New chat" aria-label="New chat" onClick={() => { if (!session || messages.length > 0) state.createChatSession(scope); state.setAiTextSelection(null); setHistoryOpen(false); setModelMenuOpen(false); setError(null); if (inputRef.current) { inputRef.current.value = ''; resizeComposer(); } inputRef.current?.focus(); }}><Plus size={18} /></button>
-        {!home && <button type="button" className="ai-chat-close" title="Close AI panel" aria-label="Close AI panel" onClick={() => state.setAiOpen(false)}><X size={17} /></button>}
+        {!home && <button type="button" className="ai-chat-close" title="Close AI panel" aria-label="Close AI panel" onClick={() => state.setAiOpen(false)}><X size={20} /></button>}
       </div>
       {modelMenuOpen && <div className="ai-model-menu" ref={modelMenuRef} role="dialog" aria-label="AI models">
         {providerId === 'codex' ? codexModels.length ? <>
