@@ -5,6 +5,7 @@ import { NativeRuntime } from './native/NativeRuntime';
 import { useEffect } from 'react';
 import { Sparkles } from 'lucide-react';
 import { AIPanel } from './components/AIPanel';
+import { PanelResizer, savedPanelWidths } from './components/PanelResizer';
 import { AppHeader } from './components/AppHeader';
 import { CanvasWorkspace } from './components/CanvasWorkspace';
 import { HomeView } from './components/HomeView';
@@ -52,10 +53,12 @@ export function App() {
   const hasActiveDocument = notes[activeNoteId]?.projectId === activeProjectId;
   return <div className={`app-frame ${projectView ? 'in-project' : ''}`}>
     <AppHeader />
-    {activeView === 'calendar' ? <HomeView /> : projectView ? <div className={`project-layout ${sidebarOpen ? '' : 'sidebar-collapsed'} ${aiOpen ? '' : 'ai-collapsed'}`}>
+    {activeView === 'calendar' ? <HomeView /> : projectView ? <div className={`project-layout ${sidebarOpen ? '' : 'sidebar-collapsed'} ${aiOpen ? '' : 'ai-collapsed'}`} style={savedPanelWidths()}>
       {sidebarOpen && <Sidebar />}
+      {sidebarOpen && <PanelResizer panel="sidebar" />}
       <section className="project-workspace"><Topbar />{activeView === 'context' ? <ContextView /> : hasActiveDocument ? <CanvasWorkspace /> : <div className="project-empty"><h1>Your project is ready</h1><p>Use the folder and document buttons next to the project name to add one.</p></div>}</section>
       {aiOpen && <AIPanel />}
+      {aiOpen && <PanelResizer panel="ai" />}
       {!aiOpen && <button className="ai-panel-toggle" onClick={() => setAiOpen(true)} aria-label="Open AI panel"><Sparkles size={20} /></button>}
     </div> : <div className="standalone-view">{activeView === 'gym' ? <GymView /> : activeView === 'profile' ? <ProfileView /> : <SettingsView />}</div>}
     <NativeRuntime /><PWAStatus />
