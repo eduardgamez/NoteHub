@@ -286,12 +286,26 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, [contentedita
 .document-mode .rich-block { height: auto; min-height: 42px; padding: 10px 12px; overflow: visible; }
 /* Default document text, one size for every screen: the page is zoomed as a
    whole, so text keeps the same proportion to blocks and ink everywhere. */
-.document-mode .rich-block { font-size: 16px; }
-.document-mode .checklist-item { font-size: 14px; }
-.document-mode .add-item { font-size: 12px; }
-.document-mode .table-cell-editor, .document-mode .table-block input { font-size: 13px; }
-.document-mode .code-block pre { font-size: 12.5px; }
-.document-mode .image-block figcaption { font-size: 12px; }
+.document-mode .rich-block { font-size: 17px; }
+.document-mode .rich-block h1 { font-size: 31px; }
+.document-mode .rich-block h2 { font-size: 25px; }
+.document-mode .rich-block h3 { font-size: 19px; }
+.document-mode .checklist-item { font-size: 15px; }
+.document-mode .add-item { font-size: 12.5px; }
+.document-mode .table-cell-editor, .document-mode .table-block input { font-size: 14px; }
+.document-mode .code-block pre { font-size: 13px; }
+.document-mode .image-block figcaption { font-size: 13px; }
+/* Text already written keeps following the default size. Safari's editing
+   freezes the size it saw into inline styles (font-size: 14px), so those are
+   ignored, and the size menu's S/M/L/XL become relative to the block text. */
+.document-mode :is(.rich-block, .checklist-item, .table-cell-editor, .image-block figcaption) [style*='font-size']:not(font) { font-size: inherit !important; }
+.document-mode :is(.rich-block, .checklist-item, .table-cell-editor, .image-block figcaption) font[size='1'] { font-size: .625em; }
+.document-mode :is(.rich-block, .checklist-item, .table-cell-editor, .image-block figcaption) font[size='2'] { font-size: .8125em; }
+.document-mode :is(.rich-block, .checklist-item, .table-cell-editor, .image-block figcaption) font[size='3'] { font-size: 1em; }
+.document-mode :is(.rich-block, .checklist-item, .table-cell-editor, .image-block figcaption) font[size='4'] { font-size: 1.125em; }
+.document-mode :is(.rich-block, .checklist-item, .table-cell-editor, .image-block figcaption) font[size='5'] { font-size: 1.5em; }
+.document-mode :is(.rich-block, .checklist-item, .table-cell-editor, .image-block figcaption) font[size='6'] { font-size: 2em; }
+.document-mode :is(.rich-block, .checklist-item, .table-cell-editor, .image-block figcaption) font[size='7'] { font-size: 3em; }
 .document-mode .title-block .rich-block { min-height: 52px; padding-top: 0; padding-bottom: 0; color: var(--text); font-family: Georgia, 'Times New Roman', serif; font-size: 38px; line-height: 1.18; }
 .document-mode .title-block .rich-block h1 { margin: 0; color: var(--text); font-size: 38px; line-height: 1.18; }
 .document-mode .code-block { height: auto; }
