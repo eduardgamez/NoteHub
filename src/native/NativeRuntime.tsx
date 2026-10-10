@@ -48,11 +48,12 @@ export function NativeRuntime() {
     document.addEventListener('visibilitychange', foreground);
     window.addEventListener('focus', foreground);
     const navigationListener = nativeBridge.addListener('notificationOpened', () => { void refresh(); });
+    const actionsListener = nativeBridge.addListener('actionsChanged', () => { void refresh(); });
     // iOS reports the permission natively; reschedule everything once it is granted.
     const permissionListener = nativeBridge.addListener('permissionChanged', foreground);
     const timer = window.setInterval(visible, 5000);
     void refresh();
-    return () => { stopped = true; for (const handle of [navigationListener, permissionListener]) void handle.then((listener) => listener.remove()).catch(() => {}); unsubscribe(); clearInterval(timer); document.removeEventListener('visibilitychange', foreground); window.removeEventListener('focus', foreground); };
+    return () => { stopped = true; for (const handle of [navigationListener, actionsListener, permissionListener]) void handle.then((listener) => listener.remove()).catch(() => {}); unsubscribe(); clearInterval(timer); document.removeEventListener('visibilitychange', foreground); window.removeEventListener('focus', foreground); };
   }, [hydrated]);
   return null;
 }

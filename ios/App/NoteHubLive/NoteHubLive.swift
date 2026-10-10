@@ -58,7 +58,7 @@ struct ReminderLiveActivity: Widget {
             TaskColumnsLayout(columns: columns, rowGap: compact ? 6 : 10) {
                 heading(state, compact: compact, remainingTasks: state.checklist.count - taskLimit)
                 ForEach(Array(state.checklist.prefix(taskLimit))) { task in
-                    Toggle(isOn: task.done, intent: CheckReminderIntent(reminderId: state.targetId ?? targetId, taskId: task.id)) {
+                    Toggle(isOn: task.done, intent: CheckReminderIntent(reminderId: state.targetId ?? targetId, taskId: task.id, done: !task.done)) {
                         Text(task.text)
                     }
                     .toggleStyle(ReminderTaskToggleStyle())
@@ -117,16 +117,19 @@ struct ReminderLiveActivity: Widget {
                 DynamicIslandExpandedRegion(.bottom) {
                     if context.state.kind != "event" {
                         if let task = context.state.checklist.first(where: { !$0.done }) {
-                            Toggle(isOn: task.done, intent: CheckReminderIntent(reminderId: context.state.targetId ?? context.attributes.id, taskId: task.id)) { Text(task.text) }
+                            Toggle(isOn: task.done, intent: CheckReminderIntent(reminderId: context.state.targetId ?? context.attributes.id, taskId: task.id, done: !task.done)) { Text(task.text) }
                                 .toggleStyle(ReminderTaskToggleStyle())
-                        } else { Text(context.state.checklist.isEmpty ? "Recordatorio" : "Tareas completadas").font(.caption) }
+                        } else { Text(context.state.checklist.isEmpty && (context.state.completed ?? 0) == 0 ? "Recordatorio" : "Tareas completadas").font(.caption) }
                     }
                 }
             } compactLeading: {
                 if context.state.kind == "event" { NoteHubMark() } else { Image(systemName: "bell") }
             } compactTrailing: {
                 if context.state.kind == "event" { Text(context.state.title).font(.caption2).lineLimit(1) }
-                else { Text("\(context.state.checklist.filter(\.done).count)/\(context.state.checklist.count)").font(.caption2) }
+                else {
+                    let done = context.state.checklist.filter(\.done).count + (context.state.completed ?? 0)
+                    Text("\(done)/\(context.state.checklist.count + (context.state.completed ?? 0))").font(.caption2)
+                }
             } minimal: {
                 if context.state.kind == "event" { NoteHubMark() } else { Image(systemName: "bell") }
             }

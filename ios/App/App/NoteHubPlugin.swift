@@ -62,7 +62,12 @@ public class NoteHubPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private var navigationObserver: NSObjectProtocol?
     private var permissionObserver: NSObjectProtocol?
+    private var actionsObserver: NSObjectProtocol?
     public override func load() {
+        // A tick on the widget reaches the open app at once instead of on its next poll.
+        actionsObserver = NotificationCenter.default.addObserver(forName: Notification.Name("NoteHubActionsChanged"), object: nil, queue: .main) { [weak self] _ in
+            self?.notifyListeners("actionsChanged", data: [:])
+        }
         navigationObserver = NotificationCenter.default.addObserver(forName: Notification.Name("NoteHubNotificationOpened"), object: nil, queue: .main) { [weak self] _ in
             self?.notifyListeners("notificationOpened", data: [:])
         }
@@ -73,6 +78,7 @@ public class NoteHubPlugin: CAPPlugin, CAPBridgedPlugin {
     deinit {
         if let navigationObserver { NotificationCenter.default.removeObserver(navigationObserver) }
         if let permissionObserver { NotificationCenter.default.removeObserver(permissionObserver) }
+        if let actionsObserver { NotificationCenter.default.removeObserver(actionsObserver) }
     }
     @objc func pendingNavigation(_ call: CAPPluginCall) { Task { @MainActor in
         if let request = ReminderStore.navigationRequest {

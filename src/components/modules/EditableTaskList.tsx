@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import { Check, GripVertical, Plus, X } from 'lucide-react';
 import type { ChecklistEntry } from '../../types';
 
-export function EditableTaskList({ items, onChange }: { items: ChecklistEntry[]; onChange: (items: ChecklistEntry[]) => void }) {
+export function EditableTaskList({ items, onChange, onToggle }: { items: ChecklistEntry[]; onChange: (items: ChecklistEntry[]) => void; onToggle?: (id: string, done: boolean) => void }) {
   const [dragging, setDragging] = useState<string | null>(null);
   const order = useRef(items);
   useLayoutEffect(() => { order.current = items; }, [items]);
@@ -47,7 +47,7 @@ export function EditableTaskList({ items, onChange }: { items: ChecklistEntry[];
           const target = event.key === 'ArrowUp' ? items[index - 1] : event.key === 'ArrowDown' ? items[index + 1] : undefined;
           if (target) { event.preventDefault(); move(item.id, target.id); }
         }}><GripVertical size={13} /></button>
-      <button type="button" className={`reminder-task-check ${item.done ? 'done' : ''}`} role="checkbox" aria-checked={item.done} aria-label={item.text || 'Tarea sin título'} onClick={() => onChange(items.map((entry) => entry.id === item.id ? { ...entry, done: !entry.done } : entry))}>{item.done && <Check size={13} />}</button>
+      <button type="button" className={`reminder-task-check ${item.done ? 'done' : ''}`} role="checkbox" aria-checked={item.done} aria-label={item.text || 'Tarea sin título'} onClick={() => onToggle ? onToggle(item.id, !item.done) : onChange(items.map((entry) => entry.id === item.id ? { ...entry, done: !entry.done } : entry))}>{item.done && <Check size={13} />}</button>
       <input aria-label={`Título de tarea ${item.id}`} value={item.text} placeholder="Tarea" className={item.done ? 'done' : ''} autoFocus={!item.text} onChange={(event) => onChange(items.map((entry) => entry.id === item.id ? { ...entry, text: event.target.value } : entry))} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); add(); } }} />
       <button type="button" className="reminder-task-remove" aria-label={`Eliminar tarea ${item.text || 'sin título'}`} onClick={() => onChange(items.filter((entry) => entry.id !== item.id))}><X size={14} /></button>
     </div>)}

@@ -215,3 +215,18 @@ it('returns to home safely when the notification refers to a deleted reminder', 
   expect(useWorkspace.getState().activeView).toBe('calendar');
   expect(screen.queryByRole('dialog', { name: 'Manage reminder' })).toBeNull();
 });
+
+it('saves a tick at once and keeps ticks made on the widget while the editor is open', () => {
+  const start = new Date(); start.setHours(10, 0, 0, 0);
+  useWorkspace.setState({ calendarEvents: [{ id: 'event-test', title: 'Study session', start: start.toISOString(), end: new Date(start.getTime() + 3600000).toISOString(), color: 'green', checklist: [{ id: 'a', text: 'Read', done: false }, { id: 'b', text: 'Write', done: false }] }] });
+  render(<CalendarView />);
+  fireEvent.click(screen.getByRole('button', { name: 'Event: Study session' }));
+  const dialog = screen.getByRole('dialog', { name: 'Manage event' });
+  fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Read' }));
+  expect(useWorkspace.getState().calendarEvents[0].checklist?.[0].done).toBe(true);
+  // A tick arriving from the widget shows in the open editor and survives saving it.
+  act(() => { const event = useWorkspace.getState().calendarEvents[0]; useWorkspace.getState().updateEvent({ ...event, checklist: event.checklist!.map((item) => item.id === 'b' ? { ...item, done: true } : item) }); });
+  expect(within(dialog).getByRole('checkbox', { name: 'Write' })).toHaveAttribute('aria-checked', 'true');
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+  expect(useWorkspace.getState().calendarEvents[0].checklist?.map((item) => item.done)).toEqual([true, true]);
+});

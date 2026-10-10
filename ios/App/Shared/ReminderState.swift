@@ -14,7 +14,8 @@ struct ReminderItem: Codable, Hashable, Identifiable {
 struct ReminderTask: Codable, Hashable, Identifiable { var id: String; var text: String; var done: Bool }
 struct ReminderAction: Codable { var id = UUID().uuidString; var targetId: String; var kind: String; var itemId: String?; var done: Bool? }
 struct ReminderAttributes: ActivityAttributes {
-    struct ContentState: Codable, Hashable { var title: String; var checklist: [ReminderTask]; var kind: String? = nil; var targetId: String? = nil; var due: Double? = nil; var end: Double? = nil }
+    // `checklist` holds only the tasks still shown; `completed` counts the ones already hidden.
+    struct ContentState: Codable, Hashable { var title: String; var checklist: [ReminderTask]; var kind: String? = nil; var targetId: String? = nil; var due: Double? = nil; var end: Double? = nil; var completed: Int? = nil }
     var id: String
 }
 
@@ -57,10 +58,36 @@ struct ReminderAttributes: ActivityAttributes {
             guard current[index].checklist[task].done != nextDone else { return }
             current[index].checklist[task].done = nextDone
             actions.append(ReminderAction(targetId: id, kind: "check", itemId: itemId, done: current[index].checklist[task].done))
+            var recent = completedAt.filter { Date().timeIntervalSince1970 - $0.value < 60 }
+            recent["\(id)|\(itemId)"] = nextDone ? Date().timeIntervalSince1970 : nil
+            completedAt = recent
+            if nextDone { hideCompletedLater() }
         }
         items = current
+        // Tell the app right away so it shows the same ticks as the widget.
+        NotificationCenter.default.post(name: actionsChanged, object: nil)
         if waitForActivity { await updateActivities() }
         else { scheduleActivityUpdate() }
+    }
+    static let actionsChanged = Notification.Name("NoteHubActionsChanged")
+    // A task ticked on the widget stays visible this long so a mistaken tap can be undone; then it
+    // leaves the widget to make room for the pending ones.
+    static let completionGrace: Double = 1
+    static var completedAt: [String: Double] {
+        get { decode("completedAt", as: [String: Double].self) ?? [:] }
+        set { encode(newValue, key: "completedAt") }
+    }
+    private static func hideCompletedLater() {
+        let finish = beginActivityUpdate()
+        Task { @MainActor in
+            defer { finish() }
+            try? await Task.sleep(nanoseconds: UInt64((completionGrace + 0.1) * 1_000_000_000))
+            await updateActivities()
+        }
+    }
+    static func shownTasks(of item: ReminderItem, now: Double) -> [ReminderTask] {
+        let recent = completedAt
+        return item.checklist.filter { !$0.done || recent["\(item.id)|\($0.id)"].map { now - $0 < completionGrace } == true }
     }
     struct NavigationRequest: Codable { var id = UUID().uuidString; var targetId: String }
     static var navigationRequest: NavigationRequest? {
@@ -125,10 +152,11 @@ struct ReminderAttributes: ActivityAttributes {
             (slot == .event ? $0.kind == "event" && ($0.end ?? $0.due) > $0.due : $0.kind == "task") }
             .sorted { $0.due < $1.due }.first
     }
-    static func content(for item: ReminderItem) -> ActivityContent<ReminderAttributes.ContentState> {
+    static func content(for item: ReminderItem, now: Double = Date().timeIntervalSince1970) -> ActivityContent<ReminderAttributes.ContentState> {
+        let shown = shownTasks(of: item, now: now)
         // A higher score keeps the reminder above the event on the Lock Screen and in the Dynamic Island.
-        ActivityContent(state: .init(title: item.title, checklist: Array(item.checklist.prefix(8)), kind: item.kind,
-                                    targetId: item.id, due: item.due, end: item.end),
+        return ActivityContent(state: .init(title: item.title, checklist: Array(shown.prefix(8)), kind: item.kind,
+                                    targetId: item.id, due: item.due, end: item.end, completed: item.checklist.count - shown.count),
                         staleDate: item.end.map { Date(timeIntervalSince1970: $0) },
                         relevanceScore: item.kind == "event" ? 50 : 100)
     }
@@ -151,6 +179,7 @@ struct ReminderAttributes: ActivityAttributes {
         syncing = true
         defer { syncing = false }
         var canCreate = allowCreation
+        var now = now
         repeat {
             refreshAgain = false
             queuedCreation = false
@@ -161,6 +190,8 @@ struct ReminderAttributes: ActivityAttributes {
             }
             for slot in Slot.allCases { await reconcile(slot, all: all, allowCreation: canCreate, now: now) }
             canCreate = canCreate || queuedCreation
+            // A queued refresh (such as hiding a ticked task after its grace period) needs the current time.
+            now = max(now, Date().timeIntervalSince1970)
         } while refreshAgain
     }
     private static func isLive(_ activity: Activity<ReminderAttributes>) -> Bool {
@@ -199,7 +230,7 @@ struct ReminderAttributes: ActivityAttributes {
             await active.end(nil, dismissalPolicy: .immediate)
             current = nil
         }
-        let value = content(for: item)
+        let value = content(for: item, now: now)
         if let current {
             observeDismissal(of: current)
             await current.update(value)
@@ -242,15 +273,18 @@ struct ReminderAttributes: ActivityAttributes {
 
 }
 
-struct CheckReminderIntent: LiveActivityIntent {
+// The toggle sets `value` to the state the user sees, so a tap never flips a task the other way
+// when the stored state and the widget briefly disagree.
+struct CheckReminderIntent: SetValueIntent, LiveActivityIntent {
     static var title: LocalizedStringResource = "Marcar tarea"
     @Parameter(title: "Recordatorio") var reminderId: String
     @Parameter(title: "Tarea") var taskId: String
+    @Parameter(title: "Completada") var value: Bool
     init() {}
-    init(reminderId: String, taskId: String) { self.reminderId = reminderId; self.taskId = taskId }
+    init(reminderId: String, taskId: String, done: Bool) { self.reminderId = reminderId; self.taskId = taskId; self.value = done }
     func perform() async throws -> some IntentResult {
         // Persist the tap before returning, but don't lock the toggle while ActivityKit renders it.
-        await ReminderStore.change(id: reminderId, itemId: taskId, waitForActivity: false)
+        await ReminderStore.change(id: reminderId, itemId: taskId, done: value, waitForActivity: false)
         return .result()
     }
 }

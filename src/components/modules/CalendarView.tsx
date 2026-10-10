@@ -27,6 +27,8 @@ function monday(date: Date) {
 function fitTextarea(element: HTMLTextAreaElement | null) { if (element) { element.style.height = 'auto'; element.style.height = `${element.scrollHeight}px`; } }
 function sameDay(a: Date, b: Date) { return a.toDateString() === b.toDateString(); }
 function localInputValue(date: Date) { return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16); }
+// The saved tick wins over the draft's: it may have changed on the widget while the editor was open.
+function liveChecklist(draft: ChecklistEntry[], saved: ChecklistEntry[] = []) { return draft.map((item) => { const stored = saved.find((entry) => entry.id === item.id); return stored ? { ...item, done: stored.done } : item; }); }
 
 export function CalendarView() {
   const notificationRequest = useNotificationNavigation((state) => state.request);
@@ -143,10 +145,24 @@ export function CalendarView() {
     return () => { cancelled = true; };
   }, [notificationRequest, tasks, events]);
 
+  // Ticks are saved at once so the widget and the app always agree; the draft only holds unsaved edits.
+  function toggleReminderTask(id: string, done: boolean) {
+    setReminderDraft((current) => ({ ...current, checklist: current.checklist.map((item) => item.id === id ? { ...item, done } : item) }));
+    if (!activeTask?.checklist.some((item) => item.id === id)) return;
+    const updated = { ...activeTask, checklist: activeTask.checklist.map((item) => item.id === id ? { ...item, done } : item) };
+    updateTask({ ...updated, done: reminderDone(updated) });
+  }
+
+  function toggleEventTask(id: string, done: boolean) {
+    setEventDraft((current) => ({ ...current, checklist: current.checklist.map((item) => item.id === id ? { ...item, done } : item) }));
+    if (!activeEvent?.checklist?.some((item) => item.id === id)) return;
+    updateEvent({ ...activeEvent, checklist: activeEvent.checklist.map((item) => item.id === id ? { ...item, done } : item) });
+  }
+
   function saveEvent(event: React.FormEvent) {
     event.preventDefault();
     if (!activeEvent || !eventDraft.title.trim() || !eventDraft.start || !eventDraft.end || new Date(eventDraft.end) <= new Date(eventDraft.start)) return;
-    updateEvent({ ...activeEvent, title: eventDraft.title.trim(), start: new Date(eventDraft.start).toISOString(), end: new Date(eventDraft.end).toISOString(), checklist: eventDraft.checklist.map((item) => ({ ...item, text: item.text.trim() })).filter((item) => item.text) });
+    updateEvent({ ...activeEvent, title: eventDraft.title.trim(), start: new Date(eventDraft.start).toISOString(), end: new Date(eventDraft.end).toISOString(), checklist: liveChecklist(eventDraft.checklist, activeEvent.checklist).map((item) => ({ ...item, text: item.text.trim() })).filter((item) => item.text) });
     setSelectedEvent(null);
   }
 
@@ -160,7 +176,7 @@ export function CalendarView() {
     event.preventDefault();
     if (!activeTask || !reminderDraft.title.trim()) return;
     const due = reminderDraft.date ? reminderDraft.allDay ? reminderDraft.date : new Date(`${reminderDraft.date}T${reminderDraft.time || '09:00'}`).toISOString() : undefined;
-    const updated = { ...activeTask, title: reminderDraft.title.trim(), due, checklist: reminderDraft.checklist.map((item) => ({ ...item, text: item.text.trim() })).filter((item) => item.text) };
+    const updated = { ...activeTask, title: reminderDraft.title.trim(), due, checklist: liveChecklist(reminderDraft.checklist, activeTask.checklist).map((item) => ({ ...item, text: item.text.trim() })).filter((item) => item.text) };
     updateTask({ ...updated, done: reminderDone(updated) });
     setSelectedTask(null);
   }
@@ -224,14 +240,14 @@ export function CalendarView() {
     {selectedEvent && activeEvent && <form ref={taskPopoverRef} className="reminder-popover reminder-editor event-editor" role="dialog" aria-label="Manage event" style={{ left: selectedEvent.x, top: selectedEvent.y, maxHeight: selectedEvent.maxHeight }} onSubmit={saveEvent}>
       <div className="reminder-title-line"><strong>Evento ·</strong><textarea key={activeEvent.id} aria-label="Título del evento" value={eventDraft.title} onChange={(event) => setEventDraft({ ...eventDraft, title: event.target.value })} rows={1} ref={fitTextarea} onInput={(event) => fitTextarea(event.currentTarget)} required /><button type="button" className="reminder-close" aria-label="Close event" onClick={() => setSelectedEvent(null)}><X size={14} /></button></div>
       {(['start', 'end'] as const).map((field) => <div className="reminder-moment" key={field}><span>{field === 'start' ? 'Inicio' : 'Fin'}</span><input aria-label={`Día de ${field === 'start' ? 'inicio' : 'fin'}`} type="date" value={eventDraft[field].slice(0, 10)} onChange={(event) => setEventDraft({ ...eventDraft, [field]: `${event.target.value}T${eventDraft[field].slice(11, 16)}` })} required /><input aria-label={`Hora de ${field === 'start' ? 'inicio' : 'fin'}`} type="time" value={eventDraft[field].slice(11, 16)} onChange={(event) => setEventDraft({ ...eventDraft, [field]: `${eventDraft[field].slice(0, 10)}T${event.target.value}` })} required /></div>)}
-      <EditableTaskList items={eventDraft.checklist} onChange={(checklist) => setEventDraft({ ...eventDraft, checklist })} />
+      <EditableTaskList items={liveChecklist(eventDraft.checklist, activeEvent.checklist)} onChange={(checklist) => setEventDraft({ ...eventDraft, checklist })} onToggle={toggleEventTask} />
       <div className="reminder-editor-footer"><span className="reminder-auto-status">{eventDone(activeEvent, now) ? 'Done' : ''}</span><button type="button" className="reminder-delete" aria-label="Delete event" onClick={() => { removeEvent(activeEvent.id); setSelectedEvent(null); }}><Trash2 size={16} /></button><button type="submit" className="reminder-save">Save</button></div>
     </form>}
 
     {selectedTask && activeTask && <form ref={taskPopoverRef} className="reminder-popover reminder-editor" role="dialog" aria-label="Manage reminder" style={{ left: selectedTask.x, top: selectedTask.y, maxHeight: selectedTask.maxHeight }} onSubmit={saveReminder}>
       <div className="reminder-title-line"><strong>{activeTask.reminder ? 'Recordatorio' : 'Tarea'} ·</strong><textarea key={activeTask.id} aria-label="Título del recordatorio" value={reminderDraft.title} onChange={(event) => setReminderDraft({ ...reminderDraft, title: event.target.value })} rows={1} ref={fitTextarea} onInput={(event) => fitTextarea(event.currentTarget)} required /><button type="button" className="reminder-close" aria-label="Close reminder" onClick={() => setSelectedTask(null)}><X size={14} /></button></div>
       <div className="reminder-moment"><span>Momento</span><input aria-label="Día del recordatorio" type="date" value={reminderDraft.date} onChange={(event) => setReminderDraft({ ...reminderDraft, date: event.target.value })} /><div className={`reminder-time-field ${reminderDraft.allDay ? 'without-time' : ''}`}><input aria-label="Hora del recordatorio" className={reminderDraft.allDay ? 'without-time' : ''} type={reminderDraft.allDay ? 'text' : 'time'} value={reminderDraft.time} disabled={reminderDraft.allDay} onChange={(event) => setReminderDraft({ ...reminderDraft, time: event.target.value })} /></div><button type="button" className={`reminder-time-toggle ${reminderDraft.allDay ? 'off' : ''}`} aria-label={reminderDraft.allDay ? 'Activar hora' : 'Quitar hora'} aria-pressed={reminderDraft.allDay} title={reminderDraft.allDay ? 'Recordatorio de todo el día. Activar hora' : 'Convertir en recordatorio de todo el día'} onClick={() => setReminderDraft({ ...reminderDraft, allDay: !reminderDraft.allDay })}><X size={15} /></button></div>
-      <EditableTaskList items={reminderDraft.checklist} onChange={(checklist) => setReminderDraft({ ...reminderDraft, checklist })} />
+      <EditableTaskList items={liveChecklist(reminderDraft.checklist, activeTask.checklist)} onChange={(checklist) => setReminderDraft({ ...reminderDraft, checklist })} onToggle={toggleReminderTask} />
       <div className="reminder-editor-footer"><span className="reminder-auto-status">{reminderDone(activeTask, now) ? 'Done' : ''}</span><button type="button" className="reminder-delete" aria-label="Delete reminder" onClick={() => { removeTask(activeTask.id); setSelectedTask(null); }}><Trash2 size={16} /></button><button type="submit" className="reminder-save">Save</button></div>
     </form>}
 

@@ -31,6 +31,7 @@ final class ReminderTests: XCTestCase {
     }
     @MainActor func seed() {
         ReminderStore.actions = []
+        ReminderStore.completedAt = [:]
         ReminderStore.dismissed = [:]
         ReminderStore.presentations = [:]
         ReminderStore.enabledAt = 0
@@ -51,14 +52,30 @@ final class ReminderTests: XCTestCase {
     }
     @MainActor func testTickIntentPersistsAbsoluteState() async throws {
         seed(); defer { clean() }
-        _ = try await CheckReminderIntent(reminderId: "task:qa", taskId: "one").perform()
+        _ = try await CheckReminderIntent(reminderId: "task:qa", taskId: "one", done: true).perform()
         XCTAssertTrue(ReminderStore.items[0].checklist[0].done)
         XCTAssertFalse(ReminderStore.items[0].checklist[1].done)
         XCTAssertEqual(ReminderStore.actions.count, 1)
         XCTAssertEqual(ReminderStore.actions[0].done, true)
-        _ = try await CheckReminderIntent(reminderId: "task:qa", taskId: "one").perform()
+        // A repeated tap from a stale widget keeps the state the user saw instead of flipping it back.
+        _ = try await CheckReminderIntent(reminderId: "task:qa", taskId: "one", done: true).perform()
+        XCTAssertTrue(ReminderStore.items[0].checklist[0].done)
+        XCTAssertEqual(ReminderStore.actions.count, 1)
+        _ = try await CheckReminderIntent(reminderId: "task:qa", taskId: "one", done: false).perform()
         XCTAssertFalse(ReminderStore.items[0].checklist[0].done)
         XCTAssertEqual(ReminderStore.actions.last?.done, false)
+    }
+    @MainActor func testTickedTaskLeavesWidgetAfterGracePeriod() async throws {
+        seed(); defer { clean(); ReminderStore.completedAt = [:] }
+        _ = try await CheckReminderIntent(reminderId: "task:qa", taskId: "one", done: true).perform()
+        let now = Date().timeIntervalSince1970
+        XCTAssertEqual(ReminderStore.content(for: ReminderStore.items[0], now: now).state.checklist.map(\.id), ["one", "two"])
+        let later = ReminderStore.content(for: ReminderStore.items[0], now: now + ReminderStore.completionGrace + 0.1).state
+        XCTAssertEqual(later.checklist.map(\.id), ["two"])
+        XCTAssertEqual(later.completed, 1)
+        // Unticking within the grace period keeps the task on the widget.
+        _ = try await CheckReminderIntent(reminderId: "task:qa", taskId: "one", done: false).perform()
+        XCTAssertEqual(ReminderStore.content(for: ReminderStore.items[0], now: now + 5).state.checklist.map(\.id), ["one", "two"])
     }
     @MainActor func testClearingNotificationRestoresOngoingEventWithoutDeletingReminder() async {
         seed(); defer { clean() }
@@ -89,7 +106,7 @@ final class ReminderTests: XCTestCase {
     @MainActor func testRapidWidgetTapsPreserveEveryChangeInOrder() async throws {
         seed(); defer { clean() }
         for index in 0..<20 {
-            _ = try await CheckReminderIntent(reminderId: "task:qa", taskId: "one").perform()
+            _ = try await CheckReminderIntent(reminderId: "task:qa", taskId: "one", done: index % 2 == 0).perform()
             XCTAssertEqual(ReminderStore.items[0].checklist[0].done, index % 2 == 0)
         }
         XCTAssertFalse(ReminderStore.items[0].checklist[0].done)
@@ -200,7 +217,7 @@ final class ReminderTests: XCTestCase {
                 if value.state.checklist.first?.done == true { updated.fulfill(); break }
             }
         }
-        _ = try await CheckReminderIntent(reminderId: "task:qa", taskId: "one").perform()
+        _ = try await CheckReminderIntent(reminderId: "task:qa", taskId: "one", done: true).perform()
         await fulfillment(of: [updated], timeout: 3)
         updates.cancel()
         let ended = expectation(description: "Activity ends after deletion")
