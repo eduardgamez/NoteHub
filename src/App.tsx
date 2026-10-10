@@ -46,7 +46,7 @@ export function App() {
     return () => window.removeEventListener('resize', fitPanels);
   }, [aiOpen, sidebarOpen]);
 
-  if (!hydrated) return <div className="loading-screen"><div className="brand-mark">N</div><span>Opening your workspace…</span></div>;
+  if (!hydrated) return <div className="loading-screen"><div className="brand-mark">N</div><span>Opening...</span></div>;
 
   const projectView = activeView === 'note' || activeView === 'project' || activeView === 'context';
   const hasActiveDocument = notes[activeNoteId]?.projectId === activeProjectId;
