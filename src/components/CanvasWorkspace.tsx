@@ -105,11 +105,11 @@ export function CanvasWorkspace() {
   useEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport || !isNativeIOS()) return;
-    // Opening or closing the keyboard must not move the document at all: the
-    // app keeps the page pinned, the area under the keyboard only gains room to
-    // scroll into, and the caret is brought above the keyboard only once the
-    // user types.
-    let keyboard = 0, room = 0, frame = 0, holdUntil = 0, anchor = viewport.scrollTop, touching = false, locked = false;
+    // The keyboard must not move the document except once, to lift the line
+    // being written just above it: the app keeps the page pinned, the area under
+    // the keyboard only gains room to scroll into, and any other scroll iOS
+    // attempts while the keyboard opens or closes is undone.
+    let keyboard = 0, room = 0, frame = 0, holdUntil = 0, ownUntil = 0, anchor = viewport.scrollTop, touching = false, locked = false;
     const editing = () => isTextField(document.activeElement) && viewport.contains(document.activeElement);
     // Pinning is requested as the finger lands, well before iOS focuses the field and starts its own scroll.
     const lock = (next: boolean) => { if (locked !== next) { locked = next; void nativeBridge.keyboardLock({ locked: next }).catch(() => {}); } };
@@ -118,15 +118,16 @@ export function CanvasWorkspace() {
     const dropRoom = () => { if (room && !keyboard && viewport.scrollTop + viewport.clientHeight <= viewport.scrollHeight - room) setRoom(0); };
     const hold = () => { holdUntil = performance.now() + 700; };
     const reveal = () => {
-      holdUntil = 0;
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
         const caret = keyboard && editing() ? caretRect() : null;
         if (!caret) return;
         const bounds = viewport.getBoundingClientRect();
         const top = bounds.top + 70, bottom = Math.min(bounds.bottom, document.documentElement.clientHeight - keyboard) - 24;
-        if (caret.bottom > bottom) viewport.scrollBy({ top: Math.min(caret.bottom - bottom, caret.top - top), behavior: 'smooth' });
-        else if (caret.top < top) viewport.scrollBy({ top: caret.top - top, behavior: 'smooth' });
+        const distance = caret.bottom > bottom ? Math.min(caret.bottom - bottom, caret.top - top) : caret.top < top ? caret.top - top : 0;
+        if (!distance) return;
+        ownUntil = performance.now() + 700;
+        viewport.scrollBy({ top: distance, behavior: 'smooth' });
       });
     };
     const keyboardChanged = (event: Event) => {
@@ -136,6 +137,7 @@ export function CanvasWorkspace() {
       const covered = keyboard && editing() && shell ? Math.max(0, keyboard - (document.documentElement.clientHeight - shell.bottom)) : 0;
       if (covered > room) setRoom(covered);
       dropRoom();
+      reveal();
     };
     const pointerDown = (event: PointerEvent) => {
       holdUntil = 0;
@@ -151,11 +153,13 @@ export function CanvasWorkspace() {
     const focusChanged = (event: FocusEvent) => {
       hold();
       if (event.type === 'focusin' && isTextField(document.activeElement)) lock(viewport.contains(document.activeElement));
+      if (event.type === 'focusin') reveal();
     };
     // iOS may still try to scroll the document to the field while the keyboard
-    // slides in or out; put it back unless the finger is the one scrolling.
+    // slides in or out; put it back unless the finger or the lift above is scrolling.
     const scrolled = () => {
-      if (!touching && performance.now() < holdUntil && viewport.scrollTop !== anchor) viewport.scrollTop = anchor;
+      const now = performance.now();
+      if (!touching && now >= ownUntil && now < holdUntil && viewport.scrollTop !== anchor) viewport.scrollTop = anchor;
       else anchor = viewport.scrollTop;
       dropRoom();
     };
