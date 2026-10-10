@@ -143,7 +143,7 @@ app.post('/api/ai/complete', aiAuth, async (request, response) => {
       response.json(parseModelResponse(text));
     }
   } catch (error) {
-    if (response.headersSent) { if (!response.destroyed) response.end(`data: ${JSON.stringify({ type: 'error', error: error instanceof Error ? error.message : 'La solicitud de IA ha fallado.' })}\n\n`); return; }
+    if (response.headersSent) { console.error(`[ai:${body.provider}]`, error instanceof Error ? error.message : error); if (!response.destroyed) response.end(`data: ${JSON.stringify({ type: 'error', error: error instanceof Error ? error.message : 'La solicitud de IA ha fallado.' })}\n\n`); return; }
     if (body.provider === 'gemini' && isGeminiQuotaExceeded(error)) {
       response.status(429).json({ code: 'QUOTA_EXCEEDED', error: 'Gemini API limit reached for this project. Check its quota or choose another model.' });
       return;

@@ -23,6 +23,8 @@ export function chatgptPlanConfigured() {
 }
 
 let refreshing: Promise<string> | undefined;
+const terminalRefreshErrors = new Set(['invalid_grant', 'invalid_refresh_token', 'token_expired', 'refresh_token_expired',
+  'refresh_token_invalidated', 'refresh_token_reused', 'invalid_client']);
 
 export async function chatgptPlanAccessToken(): Promise<string> {
   // One server process owns this session; serialize rotating refresh tokens.
@@ -45,7 +47,14 @@ async function readOrRefresh() {
     body: new URLSearchParams({ grant_type: 'refresh_token', client_id: credentials.client_id,
       refresh_token: credentials.refresh_token, resource: 'https://api.openai.com/v1' }),
   });
-  if (!response.ok) throw new Error('ChatGPT connection could not be renewed. Reauthorize NoteHub if the problem persists.');
+  if (!response.ok) {
+    // Log only the OAuth error code, never tokens, so a failed renewal can be diagnosed.
+    const failure = await response.json().catch(() => ({}));
+    const code = typeof failure.error === 'string' ? failure.error : typeof failure.error?.code === 'string' ? failure.error.code : '';
+    console.error('[chatgpt:refresh]', response.status, code);
+    if (terminalRefreshErrors.has(code)) throw new Error('ChatGPT disconnected NoteHub. Reauthorize NoteHub to keep using your ChatGPT plan.');
+    throw new Error('ChatGPT connection could not be renewed. Reauthorize NoteHub if the problem persists.');
+  }
   const tokens = await response.json();
   const scopes = typeof tokens.scope === 'string' ? tokens.scope.split(' ') : credentials.scopes;
   if (!tokens.access_token || !Number.isFinite(tokens.expires_in) || !scopes.includes('chatgpt.tokens.use.direct')) {

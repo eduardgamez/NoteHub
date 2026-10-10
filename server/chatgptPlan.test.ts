@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { saveCredentials, chatgptPlanAccessToken, type ChatGPTCredentials } from './chatgptPlan';
 
 let directory = '';
-afterEach(async () => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); if (directory) await rm(directory, { recursive: true, force: true }); });
+afterEach(async () => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.restoreAllMocks(); if (directory) await rm(directory, { recursive: true, force: true }); });
 async function fixture(expired: boolean) {
   directory = await mkdtemp(join(tmpdir(), 'notehub-plan-test-'));
   const path = join(directory, 'credentials.json');
@@ -39,5 +39,12 @@ describe('ChatGPT plan credentials', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 401 })));
     await expect(chatgptPlanAccessToken()).rejects.toThrow('could not be renewed');
     expect(JSON.parse(await readFile(path, 'utf8')).refresh_token).toBe('old-refresh');
+  });
+  it('asks for reauthorization when ChatGPT revokes the session', async () => {
+    await fixture(true);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: 'refresh_token_reused' }), { status: 400 })));
+    await expect(chatgptPlanAccessToken()).rejects.toThrow('Reauthorize NoteHub to keep using');
+    expect(console.error).toHaveBeenCalledWith('[chatgpt:refresh]', 400, 'refresh_token_reused');
   });
 });
