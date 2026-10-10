@@ -9,7 +9,21 @@ import { blockRows, findBlockDrop } from '../lib/blockLayout';
 import { BlockCard } from './BlockCard';
 import { CanvasToolbar } from './CanvasToolbar';
 import { InkLayer } from './InkLayer';
+import { isNativeIOS, nativeBridge } from '../native/bridge';
 import { documentPageWidth, documentPoint, documentRowWidth, documentSideCrop, fitDocumentScale, projectStroke, readDocumentLayout, strokeIntersectsRect, type DocumentLayout, type DocumentRect } from '../lib/documentInk';
+
+const isTextField = (element: Element | null): element is HTMLElement => element instanceof HTMLElement && (element.isContentEditable || element.tagName === 'TEXTAREA' || element.tagName === 'INPUT');
+
+function caretRect(): DOMRect | null {
+  const selection = window.getSelection();
+  if (selection?.rangeCount) {
+    const range = selection.getRangeAt(0);
+    const rects = range.getClientRects();
+    const rect = rects[rects.length - 1] ?? range.getBoundingClientRect();
+    if (rect.width || rect.height) return rect;
+  }
+  return isTextField(document.activeElement) ? document.activeElement.getBoundingClientRect() : null;
+}
 
 function selectionRect(start: Point, end: Point): DocumentRect {
   return { x: Math.min(start.x, end.x), y: Math.min(start.y, end.y), width: Math.abs(end.x - start.x), height: Math.abs(end.y - start.y) };
@@ -87,6 +101,57 @@ export function CanvasWorkspace() {
       viewport.removeEventListener('touchmove', stopStylusScroll);
     };
   }, [tool]);
+
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport || !isNativeIOS()) return;
+    // The app keeps the page still while the keyboard is up; only the document
+    // area shrinks above it and scrolls the caret into view, so the toolbar and
+    // the floating buttons stay where they are.
+    let keyboard = 0, frame = 0, unlock = 0;
+    const editing = () => isTextField(document.activeElement) && viewport.contains(document.activeElement);
+    const reveal = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const caret = keyboard && editing() ? caretRect() : null;
+        if (!caret) return;
+        const bounds = viewport.getBoundingClientRect();
+        const top = bounds.top + 70, bottom = bounds.bottom - 24;
+        if (caret.bottom > bottom) viewport.scrollBy({ top: Math.min(caret.bottom - bottom, caret.top - top), behavior: 'smooth' });
+        else if (caret.top < top) viewport.scrollBy({ top: caret.top - top, behavior: 'smooth' });
+      });
+    };
+    const fit = () => {
+      const shell = viewport.parentElement?.getBoundingClientRect();
+      const covered = keyboard && editing() && shell ? Math.max(0, keyboard - (document.documentElement.clientHeight - shell.bottom)) : 0;
+      viewport.style.bottom = covered ? `${covered}px` : '';
+      if (covered) reveal();
+    };
+    const keyboardChanged = (event: Event) => { keyboard = (event as CustomEvent<{ height: number }>).detail.height; fit(); };
+    const focusIn = () => {
+      clearTimeout(unlock);
+      if (!editing()) return;
+      void nativeBridge.keyboardLock({ locked: true }).catch(() => {});
+      fit();
+    };
+    // Wait a moment so moving between two blocks does not release the page.
+    const focusOut = () => { clearTimeout(unlock); unlock = window.setTimeout(() => { if (!editing()) { void nativeBridge.keyboardLock({ locked: false }).catch(() => {}); fit(); } }, 80); };
+    window.addEventListener('notehub-keyboard', keyboardChanged);
+    document.addEventListener('focusin', focusIn);
+    document.addEventListener('focusout', focusOut);
+    document.addEventListener('selectionchange', reveal);
+    focusIn();
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(unlock);
+      window.removeEventListener('notehub-keyboard', keyboardChanged);
+      document.removeEventListener('focusin', focusIn);
+      document.removeEventListener('focusout', focusOut);
+      document.removeEventListener('selectionchange', reveal);
+      viewport.style.bottom = '';
+      void nativeBridge.keyboardLock({ locked: false }).catch(() => {});
+    };
+  }, []);
 
   useEffect(() => {
     const update = () => {

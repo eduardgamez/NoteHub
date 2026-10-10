@@ -19,6 +19,7 @@ interface NativeBridge {
   refreshActivity(): Promise<void>;
   pendingActions(): Promise<{ actions: NativeAction[] }>;
   acknowledge(options: { ids: string[] }): Promise<void>;
+  keyboardLock(options: { locked: boolean }): Promise<void>;
 }
 export const nativeBridge = registerPlugin<NativeBridge>('NoteHubNative');
 // iOS decodes the whole list at once, so one malformed entry (synced from an older client) would cancel every notice.

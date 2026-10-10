@@ -8,7 +8,7 @@ import Security
 public class NoteHubPlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "NoteHubPlugin"
     public let jsName = "NoteHubNative"
-    public let pluginMethods: [CAPPluginMethod] = ["permission", "openSettings", "sync", "refreshActivity", "pendingActions", "acknowledge", "pendingNavigation", "acknowledgeNavigation", "authGet", "authSet", "authRemove"].map { CAPPluginMethod(name: $0, returnType: CAPPluginReturnPromise) }
+    public let pluginMethods: [CAPPluginMethod] = ["permission", "openSettings", "sync", "refreshActivity", "pendingActions", "acknowledge", "pendingNavigation", "acknowledgeNavigation", "authGet", "authSet", "authRemove", "keyboardLock"].map { CAPPluginMethod(name: $0, returnType: CAPPluginReturnPromise) }
 
     private func authQuery(_ call: CAPPluginCall) -> [String: Any]? {
         guard let key = call.getString("key"), key.hasPrefix("sb-"), key.contains("-auth-token") else {
@@ -47,6 +47,16 @@ public class NoteHubPlugin: CAPPlugin, CAPBridgedPlugin {
         guard let query = authQuery(call) else { return }
         let status = SecItemDelete(query as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else { call.reject("Could not remove session (\(status))"); return }
+        call.resolve()
+    }
+
+    // While writing in a document the web layer moves the blocks above the keyboard itself.
+    @objc func keyboardLock(_ call: CAPPluginCall) {
+        let locked = call.getBool("locked") ?? false
+        DispatchQueue.main.async {
+            NoteHubViewController.keepsPagePinned = locked
+            if locked { self.bridge?.webView?.scrollView.contentOffset = .zero }
+        }
         call.resolve()
     }
 
@@ -181,5 +191,22 @@ enum NotificationPermission {
     }
 }
 class NoteHubViewController: CAPBridgeViewController {
-    override func capacitorDidLoad() { bridge?.registerPluginInstance(NoteHubPlugin()) }
+    // iOS scrolls the whole page up to reveal a focused field, dragging the toolbars and buttons with it.
+    static var keepsPagePinned = false
+    private var offsetObservation: NSKeyValueObservation?
+
+    override func capacitorDidLoad() {
+        bridge?.registerPluginInstance(NoteHubPlugin())
+        offsetObservation = webView?.scrollView.observe(\.contentOffset) { scrollView, _ in
+            if NoteHubViewController.keepsPagePinned && scrollView.contentOffset != .zero { scrollView.contentOffset = .zero }
+        }
+        NotificationCenter.default.addObserver(self, selector: #selector(keyboardWillChangeFrame(_:)), name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
+    }
+
+    @objc private func keyboardWillChangeFrame(_ notification: Notification) {
+        guard let webView, let frame = (notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue else { return }
+        let keyboard = webView.convert(frame, from: nil)
+        let height = max(0, webView.bounds.maxY - keyboard.minY)
+        webView.evaluateJavaScript("window.dispatchEvent(new CustomEvent('notehub-keyboard', { detail: { height: \(Int(height.rounded())) } }))")
+    }
 }
