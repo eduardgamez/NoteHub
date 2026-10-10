@@ -294,10 +294,14 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, [contentedita
 .document-mode .rich-block h1 { font-size: 1.8em; }
 .document-mode .rich-block h2 { font-size: 1.5em; }
 .document-mode .rich-block h3 { font-size: 1.25em; }
-.document-mode .checklist-item { font-size: 22px; }
-.document-mode .table-cell-editor, .document-mode .table-block input { font-size: 20px; }
-.document-mode .code-block pre { font-size: 17px; }
-.document-mode .image-block figcaption { font-size: 19px; }
+.document-mode .checklist-item { font-size: var(--block-text); }
+.document-mode .checklist-block h3 { font-size: 31px; }
+.document-mode .checklist-block .eyebrow { font-size: 12px !important; }
+.document-mode .checklist-item .check-button { width: 22px; height: 22px; border-radius: 5px; }
+.document-mode .checklist-item .check-button svg { width: 15px; height: 15px; }
+.document-mode .table-cell-editor, .document-mode .table-block input { font-size: 22px; }
+.document-mode .code-block pre { font-size: 19px; }
+.document-mode .image-block figcaption { font-size: 21px; }
 /* Paragraphs that editing left inside a heading read as normal text, not as
    part of the heading. */
 .document-mode .document-page .rich-block :is(h1, h2, h3, h4, h5, h6) :is(p, div, ul, ol, pre) { margin: 0 0 11px; font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: var(--block-text) !important; font-weight: 400; line-height: 1.55; letter-spacing: normal; }
