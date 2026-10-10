@@ -294,17 +294,26 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, [contentedita
 .document-mode .table-cell-editor, .document-mode .table-block input { font-size: 14px; }
 .document-mode .code-block pre { font-size: 13px; }
 .document-mode .image-block figcaption { font-size: 13px; }
-/* Text already written keeps following the default size. Safari's editing
-   freezes the size it saw into inline styles (font-size: 14px), so those are
-   ignored, and the size menu's S/M/L/XL become relative to the block text. */
-.document-mode :is(.rich-block, .checklist-item, .table-cell-editor, .image-block figcaption) [style*='font-size']:not(font) { font-size: inherit !important; }
-.document-mode :is(.rich-block, .checklist-item, .table-cell-editor, .image-block figcaption) font[size='1'] { font-size: .625em; }
-.document-mode :is(.rich-block, .checklist-item, .table-cell-editor, .image-block figcaption) font[size='2'] { font-size: .8125em; }
-.document-mode :is(.rich-block, .checklist-item, .table-cell-editor, .image-block figcaption) font[size='3'] { font-size: 1em; }
-.document-mode :is(.rich-block, .checklist-item, .table-cell-editor, .image-block figcaption) font[size='4'] { font-size: 1.125em; }
-.document-mode :is(.rich-block, .checklist-item, .table-cell-editor, .image-block figcaption) font[size='5'] { font-size: 1.5em; }
-.document-mode :is(.rich-block, .checklist-item, .table-cell-editor, .image-block figcaption) font[size='6'] { font-size: 2em; }
-.document-mode :is(.rich-block, .checklist-item, .table-cell-editor, .image-block figcaption) font[size='7'] { font-size: 3em; }
+/* Text already written keeps following the default size. Editing, pasting
+   and older content freeze sizes into the HTML itself (font-size: 14px on a
+   span, div or <font color>, the font: shorthand, any casing), so all of
+   those are ignored, and the size menu's S/M/L/XL become relative to the
+   block text. iOS must not autosize some blocks on its own either. */
+.document-page { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+.document-mode :is(.rich-block, .checklist-item, .table-cell-editor, .image-block figcaption) :is([style*='font-size' i], [style*='font:' i], [style*='font :' i]) { font-size: inherit !important; }
+.document-mode :is(.rich-block, .checklist-item, .table-cell-editor, .image-block figcaption) :is([style*='font:' i], [style*='font :' i]) { line-height: inherit !important; }
+.document-mode :is(.rich-block, .checklist-item, .table-cell-editor, .image-block figcaption) font[size='1'] { font-size: .625em !important; }
+.document-mode :is(.rich-block, .checklist-item, .table-cell-editor, .image-block figcaption) font[size='2'] { font-size: .8125em !important; }
+.document-mode :is(.rich-block, .checklist-item, .table-cell-editor, .image-block figcaption) font[size='3'] { font-size: 1em !important; }
+.document-mode :is(.rich-block, .checklist-item, .table-cell-editor, .image-block figcaption) font[size='4'] { font-size: 1.125em !important; }
+.document-mode :is(.rich-block, .checklist-item, .table-cell-editor, .image-block figcaption) font[size='5'] { font-size: 1.5em !important; }
+.document-mode :is(.rich-block, .checklist-item, .table-cell-editor, .image-block figcaption) font[size='6'] { font-size: 2em !important; }
+.document-mode :is(.rich-block, .checklist-item, .table-cell-editor, .image-block figcaption) font[size='7'] { font-size: 3em !important; }
+/* Tables, formulas and labels written inside text follow the block text too. */
+.document-mode .rich-block table { font-size: .86em; }
+.document-mode .rich-block th { font-size: .75em; }
+.document-mode .rich-block .formula { font-size: 1.29em; }
+.document-mode .rich-block .eyebrow { font-size: .6em !important; }
 .document-mode .title-block .rich-block { min-height: 52px; padding-top: 0; padding-bottom: 0; color: var(--text); font-family: Georgia, 'Times New Roman', serif; font-size: 38px; line-height: 1.18; }
 .document-mode .title-block .rich-block h1 { margin: 0; color: var(--text); font-size: 38px; line-height: 1.18; }
 .document-mode .code-block { height: auto; }
