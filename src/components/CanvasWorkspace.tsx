@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { GripVertical, Sparkles } from 'lucide-react';
 import { useWorkspace } from '../store/useWorkspace';
@@ -351,7 +351,7 @@ export function CanvasWorkspace() {
       if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     }}>
       <div className="document-page-frame" style={{ width: frameWidth, height: pageHeight ? pageHeight * documentZoom : undefined }}>
-      <article ref={pageRef} className="document-page" style={{ width: pageWidth, minWidth: pageWidth, maxWidth: pageWidth, marginLeft: -sideCrop, transform: `scale(${documentZoom})` }}>
+      <article ref={pageRef} className="document-page" style={{ width: pageWidth, minWidth: pageWidth, maxWidth: pageWidth, marginLeft: -sideCrop, transform: `scale(${documentZoom})`, '--doc-zoom': documentZoom } as CSSProperties}>
         <div className="document-blocks">
           {rows.map((row) => {
             const rowDrop = dropTarget?.row && row.columns.some((column) => column.blocks.some((block) => block.id === dropTarget.targetId)) ? dropTarget.before ? 'drop-row-before' : 'drop-row-after' : '';

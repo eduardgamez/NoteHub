@@ -1165,11 +1165,13 @@ html:has(.home-layout), body:has(.home-layout),
   .native-ios .reminder-add-task svg { width: 17px; height: 17px; }
 }
 @media (hover: none) and (pointer: coarse) {
-  .block-chrome, .document-mode .block-chrome { top: -38px; height: 36px; }
-  .block-chrome button { width: 40px; height: 34px; }
-  .block-chrome button svg { width: 19px; height: 19px; }
-  .block-kind { height: 34px; padding: 0 10px; font-size: 11px; }
+  .block-chrome, .document-mode .block-chrome { top: -42px; height: 40px; }
+  .block-chrome button { width: 44px; height: 38px; }
+  .block-chrome button svg { width: 21px; height: 21px; }
+  .block-kind { height: 38px; padding: 0 10px; font-size: 11px; }
   .block-actions { border-radius: 8px; }
+  /* The page is scaled to fit the screen; undo it so the toolbar stays finger-sized. */
+  .document-mode .block-chrome { transform: scale(calc(1 / var(--doc-zoom, 1))); transform-origin: right bottom; }
 }
 @media (hover: none) and (pointer: coarse) {
   .project-layout .project-sidebar-toggle, .project-layout .ai-panel-toggle { width: 50px; height: 50px; }
