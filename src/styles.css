@@ -198,7 +198,10 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, [contentedita
 .rich-block h1 { margin: 4px 0 14px; font-family: Georgia, 'Times New Roman', serif; font-size: 29px; line-height: 1.12; font-weight: 500; letter-spacing: -.025em; color: #252523; }
 .rich-block h2 { margin: 0 0 12px; font-family: Georgia, serif; font-size: 23px; font-weight: 500; }
 .rich-block h3 { margin: 0 0 10px; font-size: 17px; font-weight: 650; }
-.rich-block p { margin: 0 0 11px; }
+/* Enter starts a new line with no extra gap. Browsers wrap that line in a
+   <p> or a <div> depending on where the caret was (iPhone notes often end up
+   with <p>), so both get the same spacing on every device. */
+.rich-block p { margin: 0; }
 .rich-block pre { max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; }
 .eyebrow { margin: 0 0 10px !important; color: #85857e; font-size: 8.5px !important; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; }
 .rich-block mark { padding: 1px 4px; border-radius: 3px; background: #f2e9b9; color: inherit; }
