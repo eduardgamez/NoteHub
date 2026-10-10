@@ -105,50 +105,84 @@ export function CanvasWorkspace() {
   useEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport || !isNativeIOS()) return;
-    // The app keeps the page still while the keyboard is up; only the document
-    // area shrinks above it and scrolls the caret into view, so the toolbar and
-    // the floating buttons stay where they are.
-    let keyboard = 0, frame = 0, unlock = 0;
+    // Opening or closing the keyboard must not move the document at all: the
+    // app keeps the page pinned, the area under the keyboard only gains room to
+    // scroll into, and the caret is brought above the keyboard only once the
+    // user types.
+    let keyboard = 0, room = 0, frame = 0, holdUntil = 0, anchor = viewport.scrollTop, touching = false, locked = false;
     const editing = () => isTextField(document.activeElement) && viewport.contains(document.activeElement);
+    // Pinning is requested as the finger lands, well before iOS focuses the field and starts its own scroll.
+    const lock = (next: boolean) => { if (locked !== next) { locked = next; void nativeBridge.keyboardLock({ locked: next }).catch(() => {}); } };
+    const setRoom = (next: number) => { room = next; viewport.style.setProperty('--keyboard-room', `${next}px`); };
+    // Extra room is removed only once it is out of sight, so the scroll position never has to jump.
+    const dropRoom = () => { if (room && !keyboard && viewport.scrollTop + viewport.clientHeight <= viewport.scrollHeight - room) setRoom(0); };
+    const hold = () => { holdUntil = performance.now() + 700; };
     const reveal = () => {
+      holdUntil = 0;
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
         const caret = keyboard && editing() ? caretRect() : null;
         if (!caret) return;
         const bounds = viewport.getBoundingClientRect();
-        const top = bounds.top + 70, bottom = bounds.bottom - 24;
+        const top = bounds.top + 70, bottom = Math.min(bounds.bottom, document.documentElement.clientHeight - keyboard) - 24;
         if (caret.bottom > bottom) viewport.scrollBy({ top: Math.min(caret.bottom - bottom, caret.top - top), behavior: 'smooth' });
         else if (caret.top < top) viewport.scrollBy({ top: caret.top - top, behavior: 'smooth' });
       });
     };
-    const fit = () => {
+    const keyboardChanged = (event: Event) => {
+      keyboard = (event as CustomEvent<{ height: number }>).detail.height;
+      hold();
       const shell = viewport.parentElement?.getBoundingClientRect();
       const covered = keyboard && editing() && shell ? Math.max(0, keyboard - (document.documentElement.clientHeight - shell.bottom)) : 0;
-      viewport.style.bottom = covered ? `${covered}px` : '';
-      if (covered) reveal();
+      if (covered > room) setRoom(covered);
+      dropRoom();
     };
-    const keyboardChanged = (event: Event) => { keyboard = (event as CustomEvent<{ height: number }>).detail.height; fit(); };
-    const focusIn = () => {
-      clearTimeout(unlock);
-      if (!editing()) return;
-      void nativeBridge.keyboardLock({ locked: true }).catch(() => {});
-      fit();
+    const pointerDown = (event: PointerEvent) => {
+      holdUntil = 0;
+      anchor = viewport.scrollTop;
+      const target = event.target instanceof Element ? event.target : null;
+      if (target && viewport.contains(target)) lock(true);
+      else if (isTextField(target?.closest('input, textarea, [contenteditable="true"]') ?? null)) lock(false);
     };
-    // Wait a moment so moving between two blocks does not release the page.
-    const focusOut = () => { clearTimeout(unlock); unlock = window.setTimeout(() => { if (!editing()) { void nativeBridge.keyboardLock({ locked: false }).catch(() => {}); fit(); } }, 80); };
+    // Touch events keep firing while the finger scrolls, unlike pointer events, so they tell a real drag apart.
+    const touchStart = () => { touching = true; holdUntil = 0; };
+    const touchEnd = (event: TouchEvent) => { touching = event.touches.length > 0; };
+    const wheel = () => { holdUntil = 0; };
+    const focusChanged = (event: FocusEvent) => {
+      hold();
+      if (event.type === 'focusin' && isTextField(document.activeElement)) lock(viewport.contains(document.activeElement));
+    };
+    // iOS may still try to scroll the document to the field while the keyboard
+    // slides in or out; put it back unless the finger is the one scrolling.
+    const scrolled = () => {
+      if (!touching && performance.now() < holdUntil && viewport.scrollTop !== anchor) viewport.scrollTop = anchor;
+      else anchor = viewport.scrollTop;
+      dropRoom();
+    };
     window.addEventListener('notehub-keyboard', keyboardChanged);
-    document.addEventListener('focusin', focusIn);
-    document.addEventListener('focusout', focusOut);
-    document.addEventListener('selectionchange', reveal);
-    focusIn();
+    document.addEventListener('pointerdown', pointerDown, true);
+    document.addEventListener('touchstart', touchStart, { capture: true, passive: true });
+    document.addEventListener('touchend', touchEnd, true);
+    document.addEventListener('touchcancel', touchEnd, true);
+    document.addEventListener('focusin', focusChanged);
+    document.addEventListener('focusout', focusChanged);
+    viewport.addEventListener('scroll', scrolled, { passive: true });
+    viewport.addEventListener('wheel', wheel, { passive: true });
+    viewport.addEventListener('input', reveal);
+    lock(true);
     return () => {
       cancelAnimationFrame(frame);
-      clearTimeout(unlock);
       window.removeEventListener('notehub-keyboard', keyboardChanged);
-      document.removeEventListener('focusin', focusIn);
-      document.removeEventListener('focusout', focusOut);
-      document.removeEventListener('selectionchange', reveal);
-      viewport.style.bottom = '';
+      document.removeEventListener('pointerdown', pointerDown, true);
+      document.removeEventListener('touchstart', touchStart, true);
+      document.removeEventListener('touchend', touchEnd, true);
+      document.removeEventListener('touchcancel', touchEnd, true);
+      document.removeEventListener('focusin', focusChanged);
+      document.removeEventListener('focusout', focusChanged);
+      viewport.removeEventListener('scroll', scrolled);
+      viewport.removeEventListener('wheel', wheel);
+      viewport.removeEventListener('input', reveal);
+      viewport.style.removeProperty('--keyboard-room');
       void nativeBridge.keyboardLock({ locked: false }).catch(() => {});
     };
   }, []);

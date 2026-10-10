@@ -867,6 +867,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, [contentedita
 .document-page-frame { position: relative; margin: 0 auto; flex: none; overflow: hidden; }
 .canvas-shell.document-mode .document-page { margin: 0; min-height: 0; transform-origin: top left; }
 .canvas-shell.document-fitted .document-viewport { overflow-x: hidden; }
+/* Room to scroll the last lines above the iPhone keyboard; it stays until scrolled out of sight so nothing jumps when the keyboard closes. */
+.document-viewport::after { content: ''; display: block; height: var(--keyboard-room, 0px); }
 @media (max-width: 820px) {
   .project-layout .project-sidebar-toggle, .project-layout .ai-panel-toggle {
     top: auto;
