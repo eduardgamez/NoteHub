@@ -291,7 +291,6 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, [contentedita
 .document-mode .rich-block h2 { font-size: 25px; }
 .document-mode .rich-block h3 { font-size: 19px; }
 .document-mode .checklist-item { font-size: 15px; }
-.document-mode .add-item { font-size: 12.5px; }
 .document-mode .table-cell-editor, .document-mode .table-block input { font-size: 14px; }
 .document-mode .code-block pre { font-size: 13px; }
 .document-mode .image-block figcaption { font-size: 13px; }
