@@ -291,9 +291,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, [contentedita
    whole, so text keeps the same proportion to blocks and ink everywhere. */
 .document-mode { --block-text: 25px; }
 .document-mode .rich-block { font-size: var(--block-text); }
-.document-mode .rich-block h1 { font-size: 1.5em; }
-.document-mode .rich-block h2 { font-size: 1.25em; }
-.document-mode .rich-block h3 { font-size: 1.1em; }
+.document-mode .rich-block h1 { font-size: 1.8em; }
+.document-mode .rich-block h2 { font-size: 1.5em; }
+.document-mode .rich-block h3 { font-size: 1.25em; }
 .document-mode .checklist-item { font-size: 22px; }
 .document-mode .table-cell-editor, .document-mode .table-block input { font-size: 20px; }
 .document-mode .code-block pre { font-size: 17px; }
@@ -321,8 +321,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, [contentedita
 .document-mode .rich-block th { font-size: .75em; }
 .document-mode .rich-block .formula { font-size: 1.29em; }
 .document-mode .rich-block .eyebrow { font-size: .6em !important; }
-.document-mode .title-block .rich-block { min-height: 52px; padding-top: 0; padding-bottom: 0; color: var(--text); font-family: Georgia, 'Times New Roman', serif; font-size: 38px; line-height: 1.18; }
-.document-mode .title-block .rich-block h1 { margin: 0; color: var(--text); font-size: 38px; line-height: 1.18; }
+.document-mode .title-block .rich-block { min-height: 52px; padding-top: 0; padding-bottom: 0; color: var(--text); font-family: Georgia, 'Times New Roman', serif; font-size: 46px; line-height: 1.18; }
+.document-mode .title-block .rich-block h1 { margin: 0; color: var(--text); font-size: 46px; line-height: 1.18; }
 .document-mode .code-block { height: auto; }
 .document-mode .code-block > pre { min-height: 110px; flex: none; overflow: visible; }
 .document-mode .code-result { max-height: none; overflow: visible; }
