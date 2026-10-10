@@ -1,5 +1,6 @@
 import { watchChatLifecycle } from './lib/chatLifecycle';
 import { watchOutsideTapBlur } from './lib/outsideTapBlur';
+import { watchPanelDismiss } from './lib/panelDismiss';
 import { NativeRuntime } from './native/NativeRuntime';
 import { useEffect } from 'react';
 import { Sparkles } from 'lucide-react';
@@ -31,6 +32,7 @@ export function App() {
 
   useEffect(() => { void hydrate(); }, [hydrate]);
   useEffect(() => watchOutsideTapBlur(), []);
+  useEffect(() => watchPanelDismiss((panel) => { const state = useWorkspace.getState(); if (panel === 'sidebar') state.setSidebarOpen(false); else state.setAiOpen(false); }), []);
   useEffect(() => watchChatLifecycle(() => useWorkspace.setState({ activeChatIds: {}, aiTextSelection: null })), []);
   useEffect(() => hydrated ? syncEngine.subscribe(applyRemote, () => workspaceDataFrom(useWorkspace.getState()), () => useWorkspace.getState().finishSyncRecovery()) : undefined, [applyRemote, hydrated]);
 
